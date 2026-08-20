@@ -1,7 +1,7 @@
 "use server";
 
 import { AuthError } from "next-auth";
-import { signIn } from "@/lib/auth";
+import { signIn, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
 import { hashPassword, normalizeEmail } from "@/lib/auth-passwords";
 import { ensureWorkspaceForUser } from "@/lib/workspace";
@@ -11,21 +11,27 @@ export type AuthActionResult = {
   isExistingAccount?: boolean;
 };
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export async function loginAction(
   _prevState: AuthActionResult | null,
   formData: FormData
 ): Promise<AuthActionResult> {
-  const email = String(formData.get("email") ?? "");
+  const rawEmail = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const callbackUrl = String(formData.get("callbackUrl") ?? "/dashboard");
 
-  if (!email || !password) {
+  if (!rawEmail || !password) {
     return { error: "Please enter both email and password." };
+  }
+
+  if (!EMAIL_REGEX.test(rawEmail)) {
+    return { error: "Please enter a valid email address." };
   }
 
   try {
     await signIn("credentials", {
-      email: normalizeEmail(email),
+      email: normalizeEmail(rawEmail),
       password,
       redirectTo: callbackUrl,
     });
@@ -48,14 +54,18 @@ export async function registerAction(
   _prevState: AuthActionResult | null,
   formData: FormData
 ): Promise<AuthActionResult> {
-  const email = String(formData.get("email") ?? "");
+  const rawEmail = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const confirmPassword = String(formData.get("confirmPassword") ?? "");
-  const name = String(formData.get("name") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
   const callbackUrl = String(formData.get("callbackUrl") ?? "/dashboard");
 
-  if (!email || !password) {
+  if (!rawEmail || !password) {
     return { error: "Please enter both email and password." };
+  }
+
+  if (!EMAIL_REGEX.test(rawEmail)) {
+    return { error: "Please enter a valid email address." };
   }
 
   if (password.length < 6) {
@@ -66,7 +76,7 @@ export async function registerAction(
     return { error: "Passwords do not match. Please verify." };
   }
 
-  const normalizedEmail = normalizeEmail(email);
+  const normalizedEmail = normalizeEmail(rawEmail);
 
   try {
     // Check if user already exists
@@ -89,7 +99,7 @@ export async function registerAction(
         where: { id: existingUser.id },
         data: {
           passwordHash,
-          name: name.trim() || undefined,
+          name: name || undefined,
         },
       });
       await ensureWorkspaceForUser(existingUser.id, normalizedEmail);
@@ -100,7 +110,7 @@ export async function registerAction(
         data: {
           email: normalizedEmail,
           passwordHash,
-          name: name.trim() || normalizedEmail.split("@")[0],
+          name: name || normalizedEmail.split("@")[0],
         },
       });
       await ensureWorkspaceForUser(newUser.id, normalizedEmail);
@@ -121,3 +131,8 @@ export async function registerAction(
     throw error;
   }
 }
+
+export async function signOutAction(): Promise<void> {
+  await signOut({ redirectTo: "/login" });
+}
+

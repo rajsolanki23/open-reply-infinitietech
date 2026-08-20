@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import type { AccountOption } from "@/components/account-select";
 import { InstagramConnectNotice } from "@/components/instagram-connect-notice";
+import SignOutButton from "@/components/sign-out-button";
 
 interface SettingsData {
   workspace: {
@@ -318,6 +319,26 @@ export default function SettingsPage() {
             )}
           </form>
         )}
+      </section>
+
+      <section className="panel rounded p-4 sm:p-6">
+        <h2 className="text-base font-semibold mb-6">Account & Security</h2>
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between py-3 border-b border-border">
+            <div>
+              <p className="text-sm font-medium text-foreground">Current Session</p>
+              <p className="text-xs text-muted mt-0.5">
+                Workspace Role: <span className="font-semibold text-foreground">{membersData?.currentUserRole ?? "MEMBER"}</span>
+              </p>
+            </div>
+            <SignOutButton
+              variant="danger"
+              className="text-xs sm:text-sm font-medium px-4 py-2 self-start sm:self-auto"
+            >
+              Sign Out of OpenReply
+            </SignOutButton>
+          </div>
+        </div>
       </section>
 
       <section className="panel rounded p-4 sm:p-6">

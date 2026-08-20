@@ -305,7 +305,7 @@ export default async function Home() {
               {stars !== null && <span>{formatStars(stars)}</span>}
             </a>
             <Link
-              href="/login"
+              href="/login?mode=signup"
               className="inline-flex items-center justify-center gap-2 bg-orange-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-orange-600"
             >
               Get started
@@ -332,7 +332,7 @@ export default async function Home() {
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link
-              href="/login"
+              href="/login?mode=signup"
               className="inline-flex items-center justify-center gap-2 bg-orange-500 px-6 py-3 text-sm font-bold text-white transition hover:bg-orange-600"
             >
               Get started
@@ -447,7 +447,7 @@ export default async function Home() {
           </div>
           <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
             <Link
-              href="/login"
+              href="/login?mode=signup"
               className="inline-flex items-center justify-center gap-2 bg-orange-500 px-6 py-3 text-sm font-bold text-white transition hover:bg-orange-600"
             >
               Get started

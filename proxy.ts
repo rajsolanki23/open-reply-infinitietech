@@ -1,6 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/automations", "/logs", "/settings"];
+const PROTECTED_PREFIXES = [
+  "/dashboard",
+  "/overview",
+  "/inbox",
+  "/campaigns",
+  "/automations",
+  "/logs",
+  "/settings",
+  "/diagnostics",
+];
 
 function hasSessionCookie(request: NextRequest): boolean {
   return (
@@ -35,9 +44,13 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     "/dashboard/:path*",
+    "/overview/:path*",
+    "/inbox/:path*",
+    "/campaigns/:path*",
     "/automations/:path*",
     "/logs/:path*",
     "/settings/:path*",
+    "/diagnostics/:path*",
     "/login",
   ],
 };
