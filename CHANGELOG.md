@@ -10,16 +10,20 @@
 
 ### Changed
 * Initialized `.env` configuration file from `.env.example` with cryptographically secure defaults and user database credentials.
+* Updated `package.json` `vercel-build` script to decouple `prisma migrate deploy` from static build compilation on Vercel.
 
 ### Fixed
-* None.
+* Resolved Vercel deployment build step failure by ensuring static build compilation runs `prisma generate && next build`.
 
 ### Impacted Modules
 * Environment Configuration (`.env`)
 * Database Schema & Tables (`prisma/migrations`)
 * Prisma Client (`app/generated/prisma`)
+* Deployment Configuration (`package.json`)
 
 ### Notes
 * Validated TypeScript types (`npm run typecheck` - 0 errors) and full Vitest suite (142 tests passing).
+* Successfully deployed and verified production build at `https://open-reply-infinitietech.vercel.app/`.
 * Database migrations applied cleanly.
 * Next step is setting up the Meta App credentials and Resend API key.
+
