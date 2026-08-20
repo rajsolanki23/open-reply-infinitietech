@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { useState, useActionState } from "react";
+import { loginAction, registerAction, type AuthActionResult } from "./actions";
 
 interface AuthFormProps {
   callbackUrl: string;
@@ -14,98 +14,23 @@ export default function AuthForm({
 }: AuthFormProps) {
   const [mode, setMode] = useState<"signin" | "signup">(initialMode);
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [name, setName] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  const [loginState, runLoginAction, loginPending] = useActionState<
+    AuthActionResult,
+    FormData
+  >(loginAction, {});
+
+  const [registerState, runRegisterAction, registerPending] = useActionState<
+    AuthActionResult,
+    FormData
+  >(registerAction, {});
+
+  const activeError =
+    mode === "signin" ? loginState.error : registerState.error;
+  const isPending = mode === "signin" ? loginPending : registerPending;
 
   function switchMode(newMode: "signin" | "signup") {
     setMode(newMode);
-    setError(null);
-    setPassword("");
-    setConfirmPassword("");
-  }
-
-  async function handleSignIn(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-
-    try {
-      const res = await signIn("credentials", {
-        email: email.trim().toLowerCase(),
-        password,
-        redirect: false,
-      });
-
-      if (!res || res.error) {
-        setError("Invalid email or password. Please check your credentials.");
-        setLoading(false);
-        return;
-      }
-
-      window.location.assign(callbackUrl);
-    } catch {
-      setError("An unexpected error occurred. Please try again.");
-      setLoading(false);
-    }
-  }
-
-  async function handleSignUp(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters long.");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match. Please re-enter.");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const regRes = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-          password,
-          name: name.trim() || undefined,
-        }),
-      });
-
-      const regData = await regRes.json();
-
-      if (!regRes.ok) {
-        setError(regData.error || "Failed to create account.");
-        setLoading(false);
-        return;
-      }
-
-      // Automatically sign in the newly registered user
-      const loginRes = await signIn("credentials", {
-        email: email.trim().toLowerCase(),
-        password,
-        redirect: false,
-      });
-
-      if (!loginRes || loginRes.error) {
-        setError("Account created, but automatic sign in failed. Please sign in.");
-        setMode("signin");
-        setLoading(false);
-        return;
-      }
-
-      window.location.assign(callbackUrl);
-    } catch {
-      setError("An unexpected network error occurred. Please try again.");
-      setLoading(false);
-    }
   }
 
   return (
@@ -137,11 +62,11 @@ export default function AuthForm({
       </div>
 
       {/* Error Alert */}
-      {error && (
+      {activeError && (
         <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3.5 text-sm text-red-400">
           <div className="flex items-start justify-between gap-2">
-            <span>{error}</span>
-            {error.includes("already exists") && (
+            <span>{activeError}</span>
+            {registerState.isExistingAccount && mode === "signup" && (
               <button
                 type="button"
                 onClick={() => switchMode("signin")}
@@ -156,7 +81,9 @@ export default function AuthForm({
 
       {/* Sign In Form */}
       {mode === "signin" ? (
-        <form onSubmit={handleSignIn} className="space-y-4">
+        <form action={runLoginAction} className="space-y-4">
+          <input type="hidden" name="callbackUrl" value={callbackUrl} />
+
           <div className="space-y-1.5">
             <label
               htmlFor="signin-email"
@@ -166,6 +93,7 @@ export default function AuthForm({
             </label>
             <input
               id="signin-email"
+              name="email"
               type="email"
               required
               autoComplete="email"
@@ -185,27 +113,28 @@ export default function AuthForm({
             </label>
             <input
               id="signin-password"
+              name="password"
               type="password"
               required
               autoComplete="current-password"
               placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-3 rounded bg-surface border border-border text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/60 focus:outline-none transition-colors"
             />
           </div>
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={isPending}
             className="w-full inline-flex items-center justify-center gap-2 rounded bg-accent px-6 py-3.5 text-sm font-semibold text-white shadow-indigo-500/25 transition-all hover:bg-accent-hover disabled:opacity-50"
           >
-            {loading ? "Signing in..." : "Sign In"}
+            {isPending ? "Signing in..." : "Sign In"}
           </button>
         </form>
       ) : (
         /* Sign Up Form */
-        <form onSubmit={handleSignUp} className="space-y-4">
+        <form action={runRegisterAction} className="space-y-4">
+          <input type="hidden" name="callbackUrl" value={callbackUrl} />
+
           <div className="space-y-1.5">
             <label
               htmlFor="signup-name"
@@ -215,11 +144,10 @@ export default function AuthForm({
             </label>
             <input
               id="signup-name"
+              name="name"
               type="text"
               autoComplete="name"
               placeholder="Your Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
               className="w-full px-4 py-3 rounded bg-surface border border-border text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/60 focus:outline-none transition-colors"
             />
           </div>
@@ -233,6 +161,7 @@ export default function AuthForm({
             </label>
             <input
               id="signup-email"
+              name="email"
               type="email"
               required
               autoComplete="email"
@@ -252,13 +181,12 @@ export default function AuthForm({
             </label>
             <input
               id="signup-password"
+              name="password"
               type="password"
               required
               minLength={6}
               autoComplete="new-password"
               placeholder="At least 6 characters"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-3 rounded bg-surface border border-border text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/60 focus:outline-none transition-colors"
             />
           </div>
@@ -272,23 +200,22 @@ export default function AuthForm({
             </label>
             <input
               id="signup-confirm-password"
+              name="confirmPassword"
               type="password"
               required
               minLength={6}
               autoComplete="new-password"
               placeholder="Confirm your password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
               className="w-full px-4 py-3 rounded bg-surface border border-border text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/60 focus:outline-none transition-colors"
             />
           </div>
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={isPending}
             className="w-full inline-flex items-center justify-center gap-2 rounded bg-accent px-6 py-3.5 text-sm font-semibold text-white shadow-indigo-500/25 transition-all hover:bg-accent-hover disabled:opacity-50"
           >
-            {loading ? "Creating account..." : "Create Account"}
+            {isPending ? "Creating account..." : "Create Account"}
           </button>
         </form>
       )}
