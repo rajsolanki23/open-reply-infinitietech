@@ -12,8 +12,7 @@ For the step-by-step setup, see [setup.md](setup.md).
 | Language | TypeScript 5 |
 | ORM / DB | Prisma 7 with the `@prisma/adapter-pg` driver, PostgreSQL |
 | Queue | BullMQ 5 on Redis, via `ioredis` |
-| Auth | Auth.js / NextAuth 5 (email magic links) |
-| Email | Resend (login links) |
+| Auth | Auth.js / NextAuth 5 (Email & Password Credentials) |
 | Validation | Zod 4 |
 | Charts | Recharts 3 |
 | Styling | Tailwind CSS 4 |
@@ -46,9 +45,8 @@ worker + Postgres + Redis) are covered in [setup.md](setup.md).
 | --- | --- | --- |
 | Web app | Vercel (Hobby) | Free |
 | PostgreSQL | Neon | Free (~0.5 GB) |
-| Redis | Redis Cloud (Essentials) | Free (30 MB, TCP) |
-| Worker (24/7) | Oracle Cloud "Always Free" VM (VM.Standard.E2.1.Micro, Ubuntu 22.04, kept alive with `pm2`) | Free forever |
-| Login email | Resend | Free (3k emails/mo) |
+| Redis | Redis Cloud (Essentials) / Upstash | Free (TCP) |
+| Worker (24/7) | Oracle Cloud / Railway / Render / VPS | Free / Low cost |
 | Instagram API | Meta app with Instagram Login | Free |
 
 ## Environment variables
@@ -57,6 +55,6 @@ Names only — values live in `.env` (gitignored) or the host's env settings, ne
 in the repo. Full descriptions are in [setup.md](setup.md#environment-variables).
 
 `NEXTAUTH_URL`, `NEXTAUTH_SECRET`, `CRON_SECRET`, `ENCRYPTION_KEY`, `DATABASE_URL`,
-`REDIS_URL`, `RESEND_API_KEY`, `EMAIL_FROM`, `META_GRAPH_API_VERSION`,
+`REDIS_URL`, `META_GRAPH_API_VERSION`,
 `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `FACEBOOK_APP_SECRET`,
 `WEBHOOK_VERIFY_TOKEN`.
