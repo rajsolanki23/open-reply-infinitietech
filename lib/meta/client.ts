@@ -408,19 +408,57 @@ export async function sendCommentReply(
   commentId: string,
   message: string
 ): Promise<{ id: string }> {
-  const response = await fetch(
-    `${instagramGraphBase()}/${commentId}/replies`,
-    {
+  const url = new URL(`${instagramGraphBase()}/${commentId}/replies`);
+  url.searchParams.set("message", message);
+
+  try {
+    const response = await fetch(url.toString(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({ message }),
-    }
-  );
+    });
 
-  return handleResponse(response);
+    if (response.ok) {
+      return handleResponse(response);
+    }
+
+    // Fallback: try Facebook Graph API endpoint if Instagram endpoint rejected object ID
+    const fbUrl = new URL(`${facebookGraphBase()}/${commentId}/replies`);
+    fbUrl.searchParams.set("message", message);
+    const fbResponse = await fetch(fbUrl.toString(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ message }),
+    });
+
+    if (fbResponse.ok) {
+      return handleResponse(fbResponse);
+    }
+
+    return handleResponse(response);
+  } catch (error) {
+    try {
+      const fbUrl = new URL(`${facebookGraphBase()}/${commentId}/replies`);
+      fbUrl.searchParams.set("message", message);
+      const fbResponse = await fetch(fbUrl.toString(), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ message }),
+      });
+      return handleResponse(fbResponse);
+    } catch {
+      throw error;
+    }
+  }
 }
 
 export async function getMediaComments(

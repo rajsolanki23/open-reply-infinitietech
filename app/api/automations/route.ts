@@ -420,10 +420,10 @@ export async function POST(request: NextRequest) {
         : 0,
       publicReplyEnabled: parsed.data.publicReplyEnabled,
       publicReplyMessages: parsed.data.publicReplyEnabled
-        ? publicReplyList
+        ? (publicReplyList.length > 0 ? publicReplyList : ["Check your DM! ✉️"])
         : [],
       publicReplyMessage: parsed.data.publicReplyEnabled
-        ? publicReplyList[0] ?? parsed.data.publicReplyMessage ?? null
+        ? (publicReplyList[0] ?? parsed.data.publicReplyMessage ?? "Check your DM! ✉️")
         : null,
       isActive: parsed.data.isActive,
       wholeWordMatch: parsed.data.wholeWordMatch,
@@ -524,16 +524,26 @@ export async function PATCH(request: NextRequest) {
     automationData.postUrl = null;
   }
   // Keep the public-reply variations list and the legacy single field in sync.
-  if (automationData.publicReplyMessages !== undefined) {
+  if (automationData.publicReplyEnabled === true) {
+    let list = automationData.publicReplyMessages?.map((m) => m.trim()).filter(Boolean);
+    if (!list || list.length === 0) {
+      if (automationData.publicReplyMessage?.trim()) {
+        list = [automationData.publicReplyMessage.trim()];
+      } else {
+        list = ["Check your DM! ✉️"];
+      }
+    }
+    automationData.publicReplyMessages = list;
+    automationData.publicReplyMessage = list[0] ?? "Check your DM! ✉️";
+  } else if (automationData.publicReplyEnabled === false) {
+    automationData.publicReplyMessages = [];
+    automationData.publicReplyMessage = null;
+  } else if (automationData.publicReplyMessages !== undefined) {
     const list = automationData.publicReplyMessages
       .map((m) => m.trim())
       .filter(Boolean);
     automationData.publicReplyMessages = list;
     automationData.publicReplyMessage = list[0] ?? null;
-  }
-  if (automationData.publicReplyEnabled === false) {
-    automationData.publicReplyMessages = [];
-    automationData.publicReplyMessage = null;
   }
 
   const updated = await prisma.automation.update({

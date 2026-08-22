@@ -357,12 +357,14 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
     // Public reply leg — decoupled from the DM and posted first so a DM failure
     // (e.g. a non-follower whose messaging is restricted) never suppresses it.
     // Idempotent across retries via publicReplySentAt.
-    const replyPool =
+    const rawPool =
       automation.publicReplyMessages.length > 0
         ? automation.publicReplyMessages
         : automation.publicReplyMessage
           ? [automation.publicReplyMessage]
           : [];
+    const cleanPool = rawPool.map((m) => m?.trim()).filter(Boolean);
+    const replyPool = cleanPool.length > 0 ? cleanPool : ["Check your DM! ✉️"];
     if (
       automation.publicReplyEnabled &&
       replyPool.length > 0 &&
@@ -665,19 +667,27 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
       ) {
         const delayMs =
           Math.max(0, automation.followUpDelayMinutes ?? 0) * 60_000;
-        await getDMQueue().add(
-          FOLLOWUP_JOB_NAME,
-          {
-            instagramAccountId: automation.instagramAccount.instagramId,
-            userId: commenterId,
-            automationId: automation.id,
-            commenterName,
-          },
-          {
-            delay: delayMs,
-            jobId: `followup_${automation.id}_${commenterId}`,
+        const followUpData = {
+          instagramAccountId: automation.instagramAccount.instagramId,
+          userId: commenterId,
+          automationId: automation.id,
+          commenterName,
+        };
+        const followUpJobId = `followup_${automation.id}_${commenterId}`;
+
+        await getDMQueue().add(FOLLOWUP_JOB_NAME, followUpData, {
+          delay: delayMs,
+          jobId: followUpJobId,
+        });
+
+        // Instant follow-up (0 delay): execute immediately in-process
+        if (delayMs === 0) {
+          try {
+            await processDirectJob(FOLLOWUP_JOB_NAME, followUpData, followUpJobId);
+          } catch (fErr) {
+            console.error("[Comment Follow-up Direct] Error:", fErr);
           }
-        );
+        }
       }
     } catch (error) {
       await releaseWorkspaceDMReservation(
@@ -847,19 +857,27 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
     if (automation.followUpEnabled && automation.followUpMessage?.trim()) {
       const delayMs =
         Math.max(0, automation.followUpDelayMinutes ?? 0) * 60_000;
-      await getDMQueue().add(
-        FOLLOWUP_JOB_NAME,
-        {
-          instagramAccountId: automation.instagramAccount.instagramId,
-          userId,
-          automationId: automation.id,
-          commenterName,
-        },
-        {
-          delay: delayMs,
-          jobId: `followup_${automation.id}_${userId}`,
+      const followUpData = {
+        instagramAccountId: automation.instagramAccount.instagramId,
+        userId,
+        automationId: automation.id,
+        commenterName,
+      };
+      const followUpJobId = `followup_${automation.id}_${userId}`;
+
+      await getDMQueue().add(FOLLOWUP_JOB_NAME, followUpData, {
+        delay: delayMs,
+        jobId: followUpJobId,
+      });
+
+      // Instant follow-up (0 delay): execute immediately in-process
+      if (delayMs === 0) {
+        try {
+          await processDirectJob(FOLLOWUP_JOB_NAME, followUpData, followUpJobId);
+        } catch (fErr) {
+          console.error("[Postback Follow-up Direct] Error:", fErr);
         }
-      );
+      }
     }
     await prisma.dmLog.upsert({
       where: {
@@ -1208,19 +1226,29 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
         // here exactly as it does after a button tap. Not scheduled behind the
         // follow prompt — no link went out yet in that branch.
         if (automation.followUpEnabled && automation.followUpMessage?.trim()) {
-          await getDMQueue().add(
-            FOLLOWUP_JOB_NAME,
-            {
-              instagramAccountId: automation.instagramAccount.instagramId,
-              userId: senderId,
-              automationId: automation.id,
-              commenterName,
-            },
-            {
-              delay: Math.max(0, automation.followUpDelayMinutes ?? 0) * 60_000,
-              jobId: `followup_${automation.id}_${senderId}`,
+          const delayMs =
+            Math.max(0, automation.followUpDelayMinutes ?? 0) * 60_000;
+          const followUpData = {
+            instagramAccountId: automation.instagramAccount.instagramId,
+            userId: senderId,
+            automationId: automation.id,
+            commenterName,
+          };
+          const followUpJobId = `followup_${automation.id}_${senderId}`;
+
+          await getDMQueue().add(FOLLOWUP_JOB_NAME, followUpData, {
+            delay: delayMs,
+            jobId: followUpJobId,
+          });
+
+          // Instant follow-up (0 delay): execute immediately in-process
+          if (delayMs === 0) {
+            try {
+              await processDirectJob(FOLLOWUP_JOB_NAME, followUpData, followUpJobId);
+            } catch (fErr) {
+              console.error("[Message Follow-up Direct] Error:", fErr);
             }
-          );
+          }
         }
       }
 

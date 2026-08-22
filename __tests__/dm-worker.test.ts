@@ -9,6 +9,7 @@ const {
   mockSendDirectMessageWithButton,
   mockSendDirectMessage,
   mockSendDirectMessageWithLinkButton,
+  mockSendCommentReply,
   mockDecryptToken,
   mockMatchKeywords,
   mockReserveDMSlot,
@@ -42,6 +43,7 @@ const {
   mockSendDirectMessageWithButton: vi.fn(),
   mockSendDirectMessage: vi.fn(),
   mockSendDirectMessageWithLinkButton: vi.fn(),
+  mockSendCommentReply: vi.fn(),
   mockDecryptToken: vi.fn(),
   mockMatchKeywords: vi.fn(),
   mockReserveDMSlot: vi.fn(),
@@ -62,7 +64,7 @@ vi.mock("@/lib/meta/client", () => ({
   sendDirectMessageWithButton: mockSendDirectMessageWithButton,
   sendDirectMessage: mockSendDirectMessage,
   sendDirectMessageWithLinkButton: mockSendDirectMessageWithLinkButton,
-  sendCommentReply: vi.fn(),
+  sendCommentReply: mockSendCommentReply,
   MetaApiError: class MetaApiError extends Error {
     code: number;
     constructor(
@@ -1174,5 +1176,55 @@ describe("DM Worker — Follow-up Messages", () => {
       })
     );
   });
+
+  it("should send fallback public comment reply when public reply is enabled but message pool is empty", async () => {
+    mockPrisma.automation.findMany.mockResolvedValue([
+      {
+        ...mockAutomation,
+        publicReplyEnabled: true,
+        publicReplyMessage: null,
+        publicReplyMessages: [],
+      },
+    ]);
+
+    const processor = getProcessor();
+    await processor(createMockJob());
+
+    expect(mockSendCommentReply).toHaveBeenCalledWith(
+      "decrypted_token",
+      "comment_555",
+      "Check your DM! ✉️"
+    );
+  });
+
+  it("should dispatch follow-up immediately when followUpDelayMinutes is 0 in processPostback", async () => {
+    mockPrisma.automation.findFirst.mockResolvedValue({
+      id: "auto_789",
+      workspaceId: "workspace_123",
+      instagramAccountId: "ig_account_row_1",
+      followUpEnabled: true,
+      followUpMessage: "Thanks for tapping the button!",
+      followUpDelayMinutes: 0,
+      dmMessage: "Here is your link: https://example.com",
+      linkButtonLabel: null,
+      trackedLinks: [],
+      isActive: true,
+      instagramAccount: {
+        instagramId: "ig_456",
+        accessToken: "encrypted_token_abc",
+      },
+    });
+
+    const processor = getProcessor();
+    await processor(createMockPostbackJob());
+
+    expect(mockSendDirectMessage).toHaveBeenCalledWith(
+      "decrypted_token",
+      "ig_456",
+      "commenter_999",
+      "Thanks for tapping the button!"
+    );
+  });
 });
+
 
