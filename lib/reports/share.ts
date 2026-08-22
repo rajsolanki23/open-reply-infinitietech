@@ -6,11 +6,18 @@ export function generateReportShareSlug() {
 }
 
 export function buildReportUrl(slug: string, baseUrl?: string) {
-  const resolvedBaseUrl =
-    baseUrl ??
-    (typeof window !== "undefined"
-      ? window.location.origin
-      : getBaseUrl());
+  let resolvedBaseUrl = baseUrl;
+  if (!resolvedBaseUrl || resolvedBaseUrl.includes("localhost")) {
+    if (
+      typeof window !== "undefined" &&
+      window.location.origin &&
+      !window.location.origin.includes("localhost")
+    ) {
+      resolvedBaseUrl = window.location.origin;
+    } else {
+      resolvedBaseUrl = getBaseUrl();
+    }
+  }
 
   return `${resolvedBaseUrl.replace(/\/$/, "")}/reports/${slug}`;
 }

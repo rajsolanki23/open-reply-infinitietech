@@ -542,8 +542,14 @@ describe("DM Worker — Full Pipeline", () => {
       "comment_555",
       "Hey commenter_user! Here is the offer:",
       [
-        { title: "Get offer", url: "http://localhost:3000/r/abc123" },
-        { title: "Book a call", url: "http://localhost:3000/r/def456" },
+        {
+          title: "Get offer",
+          url: "https://open-reply-infinitietech.vercel.app/r/abc123",
+        },
+        {
+          title: "Book a call",
+          url: "https://open-reply-infinitietech.vercel.app/r/def456",
+        },
       ]
     );
   });
@@ -613,7 +619,12 @@ describe("DM Worker — Full Pipeline", () => {
       "ig_456",
       "comment_555",
       "Hey commenter_user! Here is the offer:",
-      [{ title: "Get offer", url: "http://localhost:3000/r/abc123" }]
+      [
+        {
+          title: "Get offer",
+          url: "https://open-reply-infinitietech.vercel.app/r/abc123",
+        },
+      ]
     );
   });
 
