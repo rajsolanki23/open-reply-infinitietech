@@ -117,7 +117,11 @@ export async function POST(request: NextRequest) {
 
       // Direct in-process execution on Vercel Serverless if worker is enabled
       if (workerActive) {
-        void processDirectJob("process-comment", jobData, jobId);
+        try {
+          await processDirectJob("process-comment", jobData, jobId);
+        } catch (directErr) {
+          console.error("[Webhook Direct Process] Comment error:", directErr);
+        }
       }
 
       if (account) {
@@ -148,7 +152,11 @@ export async function POST(request: NextRequest) {
 
       // Direct in-process execution on Vercel Serverless if worker is enabled
       if (workerActive) {
-        void processDirectJob(POSTBACK_JOB_NAME, jobData, jobId);
+        try {
+          await processDirectJob(POSTBACK_JOB_NAME, jobData, jobId);
+        } catch (directErr) {
+          console.error("[Webhook Direct Process] Postback error:", directErr);
+        }
       }
     }
 
@@ -177,7 +185,11 @@ export async function POST(request: NextRequest) {
 
       // Direct in-process execution on Vercel Serverless if worker is enabled
       if (workerActive) {
-        void processDirectJob(MESSAGE_JOB_NAME, jobData, jobId);
+        try {
+          await processDirectJob(MESSAGE_JOB_NAME, jobData, jobId);
+        } catch (directErr) {
+          console.error("[Webhook Direct Process] Message error:", directErr);
+        }
       }
 
       if (account) {

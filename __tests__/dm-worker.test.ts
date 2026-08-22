@@ -1097,3 +1097,82 @@ describe("DM Worker — DM keyword trigger", () => {
     );
   });
 });
+
+describe("DM Worker — Follow-up Messages", () => {
+  it("should schedule follow-up job when comment automation has follow-up enabled", async () => {
+    mockPrisma.automation.findMany.mockResolvedValue([
+      {
+        ...mockAutomation,
+        followUpEnabled: true,
+        followUpMessage: "Thanks for commenting! Hope this helps.",
+        followUpDelayMinutes: 5,
+      },
+    ]);
+
+    const processor = getProcessor();
+    await processor(createMockJob());
+
+    expect(mockSendPrivateReply).toHaveBeenCalled();
+    expect(mockQueueAdd).toHaveBeenCalledWith(
+      "process-followup",
+      expect.objectContaining({
+        automationId: "auto_789",
+        userId: "commenter_999",
+        instagramAccountId: "ig_456",
+      }),
+      expect.objectContaining({
+        delay: 5 * 60_000,
+        jobId: "followup_auto_789_commenter_999",
+      })
+    );
+  });
+
+  it("should send direct message and log SENT when processFollowUp executes", async () => {
+    mockPrisma.automation.findFirst.mockResolvedValue({
+      id: "auto_789",
+      workspaceId: "workspace_123",
+      instagramAccountId: "ig_account_row_1",
+      followUpEnabled: true,
+      followUpMessage: "Thank you for checking it out!",
+      instagramAccount: {
+        instagramId: "ig_456",
+        accessToken: "encrypted_token_abc",
+      },
+    });
+
+    const processor = getProcessor();
+    await processor({
+      name: "process-followup",
+      data: {
+        instagramAccountId: "ig_456",
+        userId: "commenter_999",
+        automationId: "auto_789",
+        commenterName: "commenter_user",
+      },
+      id: "followup_auto_789_commenter_999",
+      attemptsMade: 0,
+    });
+
+    expect(mockSendDirectMessage).toHaveBeenCalledWith(
+      "decrypted_token",
+      "ig_456",
+      "commenter_999",
+      "Thank you for checking it out!"
+    );
+    expect(mockPrisma.dmLog.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          automationId_commentId: {
+            automationId: "auto_789",
+            commentId: "followup:commenter_999",
+          },
+        },
+        create: expect.objectContaining({
+          status: "SENT",
+          commentText: "(follow-up message)",
+        }),
+      })
+    );
+  });
+});
+

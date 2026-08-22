@@ -654,6 +654,31 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
           errorMessage: null,
         },
       });
+
+      // Optional appreciation follow-up: once the link has been delivered, send a
+      // short thank-you if follow-up is enabled and opening DM was not used (opening DM handles it in processPostback).
+      if (
+        !useOpeningDm &&
+        !sendFollowPrompt &&
+        automation.followUpEnabled &&
+        automation.followUpMessage?.trim()
+      ) {
+        const delayMs =
+          Math.max(0, automation.followUpDelayMinutes ?? 0) * 60_000;
+        await getDMQueue().add(
+          FOLLOWUP_JOB_NAME,
+          {
+            instagramAccountId: automation.instagramAccount.instagramId,
+            userId: commenterId,
+            automationId: automation.id,
+            commenterName,
+          },
+          {
+            delay: delayMs,
+            jobId: `followup_${automation.id}_${commenterId}`,
+          }
+        );
+      }
     } catch (error) {
       await releaseWorkspaceDMReservation(
         automation.workspaceId,
@@ -915,6 +940,8 @@ async function processFollowUp(job: Job<ProcessFollowUpJob>): Promise<void> {
     return;
   }
 
+  const dedupeId = `followup:${userId}`;
+
   let accessToken: string;
   try {
     accessToken = decryptToken(automation.instagramAccount.accessToken);
@@ -922,21 +949,76 @@ async function processFollowUp(job: Job<ProcessFollowUpJob>): Promise<void> {
     return;
   }
 
+  const messageText = renderMessageWithoutLink({
+    message: automation.followUpMessage,
+    commenterName: commenterName ?? null,
+  });
+
   try {
     await sendDirectMessage(
       accessToken,
       automation.instagramAccount.instagramId,
       userId,
-      renderMessageWithoutLink({
-        message: automation.followUpMessage,
-        commenterName: commenterName ?? null,
-      })
+      messageText
     );
+
+    await prisma.dmLog
+      .upsert({
+        where: {
+          automationId_commentId: {
+            automationId: automation.id,
+            commentId: dedupeId,
+          },
+        },
+        create: {
+          workspaceId: automation.workspaceId,
+          automationId: automation.id,
+          instagramAccountId: automation.instagramAccountId,
+          commenterId: userId,
+          commenterName,
+          commentText: "(follow-up message)",
+          commentId: dedupeId,
+          status: "SENT",
+          dmSentAt: new Date(),
+        },
+        update: {
+          status: "SENT",
+          dmSentAt: new Date(),
+          errorMessage: null,
+        },
+      })
+      .catch(() => {});
   } catch (error) {
     console.log(
       "[DM Worker] Failed to send follow-up message:",
       formatError(error)
     );
+
+    await prisma.dmLog
+      .upsert({
+        where: {
+          automationId_commentId: {
+            automationId: automation.id,
+            commentId: dedupeId,
+          },
+        },
+        create: {
+          workspaceId: automation.workspaceId,
+          automationId: automation.id,
+          instagramAccountId: automation.instagramAccountId,
+          commenterId: userId,
+          commenterName,
+          commentText: "(follow-up message)",
+          commentId: dedupeId,
+          status: "FAILED",
+          errorMessage: formatError(error),
+        },
+        update: {
+          status: "FAILED",
+          errorMessage: formatError(error),
+        },
+      })
+      .catch(() => {});
   }
 }
 
@@ -1351,6 +1433,37 @@ export async function drainWaitingJobs(
 
   try {
     const queue = getDMQueue();
+    const now = Date.now();
+
+    // 1. Check delayed jobs that have reached their scheduled execution time
+    try {
+      const delayedJobs = await queue.getJobs(["delayed"], 0, Math.max(0, limit - 1));
+      for (const job of delayedJobs) {
+        const delay = job.opts?.delay ?? 0;
+        const timestamp = job.timestamp ?? 0;
+        if (timestamp + delay <= now) {
+          try {
+            await processJob(job);
+            await job.remove();
+            processed++;
+          } catch (err) {
+            failed++;
+            console.error(
+              `[DM Worker Drain] Delayed job ${job.id} failed during drain:`,
+              err
+            );
+            await recordWorkerFailure(
+              job,
+              err instanceof Error ? err : new Error(String(err))
+            );
+          }
+        }
+      }
+    } catch (delayErr) {
+      console.error("[DM Worker Drain] Error checking delayed queue:", delayErr);
+    }
+
+    // 2. Drain waiting queue jobs
     const waitingJobs = await queue.getJobs(["waiting"], 0, Math.max(0, limit - 1));
 
     for (const job of waitingJobs) {

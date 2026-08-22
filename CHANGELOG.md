@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## 2026-08-22 — Automation Worker Continuous Auto-Sync & Follow-Up Message Delivery Fix
+
+### Added
+* Follow-up thank you message scheduling support for direct comment automations in `lib/queue/dm-worker.ts` (`processComment`).
+* Follow-up message status logging in `prisma.dmLog` (`status: "SENT"` / `"FAILED"`) within `processFollowUp`.
+* Ready delayed job promotion and processing in `drainWaitingJobs`, ensuring expired delayed jobs (such as follow-up thank you messages and retry delays) are immediately drained during sync cycles.
+* Continuous background queue auto-sync engine on System Status page (`app/(dashboard)/diagnostics/page.tsx`) that automatically runs when the worker is in `ENABLED` mode and halts when turned `OFF`.
+* Automated cloud cron entry in `vercel.json` for `/api/cron/worker-sync` running every minute.
+* Unit tests in `__tests__/dm-worker.test.ts` verifying follow-up scheduling on reel comment automations and direct delivery logging.
+
+### Fixed
+* Fixed reel comment automations not sending direct messages immediately on Vercel serverless by awaiting in-process execution (`processDirectJob`) within the Meta webhook lifecycle in `app/api/webhook/route.ts`.
+* Fixed missing appreciation thank-you messages on comment trigger automations where follow-up was configured.
+
+### Impacted Modules
+* Queue & Worker Engine (`lib/queue/dm-worker.ts`)
+* Webhooks (`app/api/webhook/route.ts`)
+* Diagnostics UI (`app/(dashboard)/diagnostics/page.tsx`)
+* Configuration (`vercel.json`)
+* Test Suites (`__tests__/dm-worker.test.ts`)
+
+### Notes
+* All 19 test suites and 176 unit tests passing (`npm test`).
+* TypeScript verification passed with 0 errors (`npm run typecheck`).
+
+---
+
 ## 2026-08-22 — Security Hardening, Access Control & Authorization Hardening Release
 
 ### Added

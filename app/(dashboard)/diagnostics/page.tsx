@@ -182,13 +182,26 @@ export default function DiagnosticsPage() {
   useEffect(() => {
     void fetchDiagnostics(true);
 
-    // Periodic live sync every 30 seconds
-    const interval = setInterval(() => {
+    // Continuous background sync and diagnostics refresh when worker is enabled
+    const interval = setInterval(async () => {
+      // If worker is enabled, continuously sync and drain queue; otherwise just refresh stats
+      const isEnabled = data?.workerHealth.enabled ?? true;
+      if (isEnabled) {
+        try {
+          await fetch("/api/admin/worker", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "sync_now" }),
+          });
+        } catch {
+          // Ignore background sync errors
+        }
+      }
       void fetchDiagnostics(false);
-    }, 30000);
+    }, 12000);
 
     return () => clearInterval(interval);
-  }, [fetchDiagnostics]);
+  }, [fetchDiagnostics, data?.workerHealth.enabled]);
 
   if (loading && !data) {
     return (
