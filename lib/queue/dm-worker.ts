@@ -716,16 +716,24 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
   // instead of only firing once per person.
   const dedupeId = `reveal:${userId}`;
 
-  if (fallback) {
-    const existingReveal = await prisma.dmLog.findUnique({
-      where: {
-        automationId_commentId: {
-          automationId: automation.id,
-          commentId: dedupeId,
-        },
+  const existingReveal = await prisma.dmLog.findUnique({
+    where: {
+      automationId_commentId: {
+        automationId: automation.id,
+        commentId: dedupeId,
       },
-    });
+    },
+  });
+
+  if (fallback) {
     if (existingReveal?.status === "SENT") return;
+  } else if (
+    existingReveal?.status === "SENT" &&
+    existingReveal.dmSentAt &&
+    Date.now() - new Date(existingReveal.dmSentAt).getTime() < 10_000
+  ) {
+    // Debounce concurrent button taps and duplicate webhook events within 10 seconds
+    return;
   }
 
   // Personalize {username} from the opening DM log for this user, if present.
@@ -1184,6 +1192,18 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
 }
 
 async function processJob(job: Job<DmQueueJob>): Promise<void> {
+  const lockKey = `lock:job:${job.name}:${job.id ?? JSON.stringify(job.data)}`;
+  try {
+    const redis = getRedisConnection();
+    const acquired = await redis.set(lockKey, "1", "EX", 20, "NX");
+    if (!acquired) {
+      // Another worker or processDirectJob has already claimed this job
+      return;
+    }
+  } catch {
+    // If Redis lock fails, proceed safely
+  }
+
   if (job.name === POSTBACK_JOB_NAME) {
     return processPostback(job as Job<ProcessPostbackJob>);
   }
