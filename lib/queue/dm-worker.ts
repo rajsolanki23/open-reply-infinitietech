@@ -363,8 +363,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
         : automation.publicReplyMessage
           ? [automation.publicReplyMessage]
           : [];
-    const cleanPool = rawPool.map((m) => m?.trim()).filter(Boolean);
-    const replyPool = cleanPool.length > 0 ? cleanPool : ["Check your DM! ✉️"];
+    const replyPool = rawPool.map((m) => m?.trim()).filter(Boolean) as string[];
     if (
       automation.publicReplyEnabled &&
       replyPool.length > 0 &&

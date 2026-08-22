@@ -1177,13 +1177,13 @@ describe("DM Worker — Follow-up Messages", () => {
     );
   });
 
-  it("should send fallback public comment reply when public reply is enabled but message pool is empty", async () => {
+  it("should send public comment reply when public reply is enabled with user message", async () => {
     mockPrisma.automation.findMany.mockResolvedValue([
       {
         ...mockAutomation,
         publicReplyEnabled: true,
-        publicReplyMessage: null,
-        publicReplyMessages: [],
+        publicReplyMessage: "Check your Inbox! 📩",
+        publicReplyMessages: ["Check your Inbox! 📩"],
       },
     ]);
 
@@ -1193,7 +1193,7 @@ describe("DM Worker — Follow-up Messages", () => {
     expect(mockSendCommentReply).toHaveBeenCalledWith(
       "decrypted_token",
       "comment_555",
-      "Check your DM! ✉️"
+      "Check your Inbox! 📩"
     );
   });
 

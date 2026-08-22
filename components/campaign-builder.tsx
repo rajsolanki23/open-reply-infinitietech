@@ -435,9 +435,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
       openingDmButtonLabel: openingDmEnabled ? openingDmButtonLabel : null,
       publicReplyEnabled,
       publicReplyMessages: publicReplyEnabled
-        ? publicReplyMessages.map((m) => m.trim()).filter(Boolean).length > 0
-          ? publicReplyMessages.map((m) => m.trim()).filter(Boolean)
-          : ["Check your DM! ✉️"]
+        ? publicReplyMessages.map((m) => m.trim()).filter(Boolean)
         : [],
       trackedDestinationUrl: trackedDestinationUrl.trim() || "",
       linkButtonLabel: linkButtonLabel.trim() || "Open link",

@@ -1,16 +1,14 @@
 # CHANGELOG
 
-## 2026-08-22 — Auto Comments Fallback & Instant Follow-Up Message Delivery Hardening
+## 2026-08-22 — Public Comment Reply & Instant Follow-Up Message Delivery Alignment
 
 ### Added
-* Automatic default public reply message fallback (`"Check your DM! ✉️"`) in `lib/queue/dm-worker.ts`, `components/campaign-builder.tsx`, and `app/api/automations/route.ts` whenever Public Comment Reply is enabled on an automation.
-* Hardened `sendCommentReply` in `lib/meta/client.ts` with URL query parameters and automatic fallback across Instagram Graph and Facebook Graph API endpoints.
+* Hardened `sendCommentReply` in `lib/meta/client.ts` with URL query parameters, JSON payload, and automatic fallback across Instagram Graph and Facebook Graph API endpoints.
 * Immediate in-process dispatching for `0`-delay follow-up appreciation messages right after reveal link delivery in `processPostback`, `processComment`, and `processMessage`.
-* Unit tests in `__tests__/dm-worker.test.ts` for fallback public comment replies and instant follow-up dispatching.
+* Unit tests in `__tests__/dm-worker.test.ts` verifying user-configured public comment replies and instant follow-up dispatching.
 
-### Fixed
-* Fixed public comment auto-replies skipping execution on reel comments when campaigns were saved without custom text.
-* Fixed follow-up appreciation messages not sending immediately after the link was delivered when configured with 0-minute delay.
+### Changed
+* Strict adherence to user-configured public comment reply messages without synthetic fallback text injections, posting the exact variation entered under "Public comment reply" in the Campaign Builder.
 
 ### Impacted Modules
 * Meta Graph API Client (`lib/meta/client.ts`)
