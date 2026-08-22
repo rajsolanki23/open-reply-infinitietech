@@ -1,17 +1,31 @@
 "use client";
 
 /**
- * Instagram Overview Page
+ * Instagram Insights (Overview) Page
  *
  * Aggregate reach/engagement across your recent posts, plus a per-post table.
- * Views / reach / saved / shares come from Instagram media insights (requires
- * the insights permission); likes and comments are always available.
+ * 6 StatCards with interactive skeleton shimmer, follower growth chart,
+ * responsive media list, and live post filter loading indicators.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import {
+  Eye,
+  Users,
+  Heart,
+  MessageCircle,
+  Bookmark,
+  Share2,
+  ExternalLink,
+  ChevronDown,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
 import AccountSelect from "@/components/account-select";
-import StatCard from "@/components/stat-card";
+import { StatCard } from "@/components/ui-refined/stat-card";
+import { AnimatedCard } from "@/components/ui-refined/animated-card";
 import FollowerChart from "@/components/follower-chart";
+import { StatCardsSkeleton } from "@/components/ui-refined/loading-skeleton";
 import type { OverviewResponse } from "@/app/api/instagram/overview/route";
 
 function formatNumber(n: number | null): string {
@@ -22,81 +36,96 @@ function formatNumber(n: number | null): string {
 }
 
 function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  } catch {
+    return iso;
+  }
 }
 
 const COUNT_OPTIONS = [
-  { value: "25", label: "Last 25" },
-  { value: "50", label: "Last 50" },
-  { value: "100", label: "Last 100" },
+  { value: "25", label: "Last 25 posts" },
+  { value: "50", label: "Last 50 posts" },
+  { value: "100", label: "Last 100 posts" },
   { value: "all", label: "All time" },
 ];
 
 export default function OverviewPage() {
   const [data, setData] = useState<OverviewResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [isFiltering, setIsFiltering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState("all");
   const [count, setCount] = useState("50");
 
-  useEffect(() => {
-    const params = new URLSearchParams();
-    if (selectedAccountId !== "all") {
-      params.set("instagramAccountId", selectedAccountId);
-    }
-    params.set("count", count);
+  const fetchInsights = useCallback(
+    async (targetAccount: string, targetCount: string, isInitial = false) => {
+      if (isInitial) setInitialLoading(true);
+      setIsFiltering(true);
 
-    fetch(`/api/instagram/overview?${params}`)
-      .then((r) => r.json())
-      .then((res) => {
+      const params = new URLSearchParams();
+      if (targetAccount !== "all") {
+        params.set("instagramAccountId", targetAccount);
+      }
+      params.set("count", targetCount);
+
+      try {
+        const response = await fetch(`/api/instagram/overview?${params}`);
+        const res = await response.json();
         if (res.success) {
           setData(res.data);
           setError(null);
         } else {
-          setError(res.error ?? "Failed to load overview");
+          setError(res.error ?? "Could not load insights");
         }
-      })
-      .catch(() => setError("Failed to load overview"))
-      .finally(() => setLoading(false));
-  }, [selectedAccountId, count]);
+      } catch {
+        setError("Could not load insights");
+      } finally {
+        setInitialLoading(false);
+        setIsFiltering(false);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    void fetchInsights(selectedAccountId, count, true);
+  }, [fetchInsights]); // Only on mount
 
   function handleAccountChange(accountId: string) {
-    setLoading(true);
     setSelectedAccountId(accountId);
+    void fetchInsights(accountId, count, false);
   }
 
-  function handleCountChange(next: string) {
-    setLoading(true);
-    setCount(next);
+  function handleCountChange(nextCount: string) {
+    setCount(nextCount);
+    void fetchInsights(selectedAccountId, nextCount, false);
   }
 
-  if (loading) {
+  if (initialLoading && !data) {
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
-        {[...Array(6)].map((_, i) => (
-          <div key={i} className="panel rounded p-4 h-24 sm:p-5">
-            <div className="h-4 w-16 bg-zinc-200 rounded" />
-            <div className="mt-3 h-6 w-20 bg-zinc-200/60 rounded" />
-          </div>
-        ))}
+      <div className="space-y-6">
+        <div className="h-10 w-48 bg-slate-100 rounded-xl animate-pulse" />
+        <StatCardsSkeleton count={6} />
+        <div className="h-72 bg-slate-100 rounded-2xl animate-pulse" />
       </div>
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
-      <div className="panel rounded p-8 text-center">
-        <p className="text-sm text-error">{error}</p>
+      <AnimatedCard className="p-8 text-center space-y-4">
+        <p className="text-sm text-slate-600">{error}</p>
         {error.includes("connect") && (
           <a
             href="/api/instagram/connect"
-            className="mt-4 inline-block text-sm text-accent hover:underline"
+            className="inline-flex items-center px-4 py-2 rounded-xl bg-orange-500 text-white text-sm font-semibold shadow-glow hover:bg-orange-600 transition-colors"
           >
             Connect Instagram
           </a>
         )}
-      </div>
+      </AnimatedCard>
     );
   }
 
@@ -105,34 +134,44 @@ export default function OverviewPage() {
   const { totals, posts, accounts, insightsAvailable, followers, followerHistory } =
     data;
 
+  const currentOptionLabel =
+    COUNT_OPTIONS.find((o) => o.value === count)?.label ?? `Last ${count} posts`;
+
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-foreground">Overview</h1>
-          <p className="text-sm text-muted mt-1">
-            {data.requestedCount === "all" ? "All-time" : "Recent"} —{" "}
-            {totals.posts} post{totals.posts === 1 ? "" : "s"} from @
-            {data.account.username}
-            {data.truncated ? ` (capped at ${totals.posts})` : ""}
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+              Insights
+            </h1>
+            {isFiltering && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-orange-50 text-orange-600 border border-orange-200/80 animate-in fade-in duration-200">
+                <Loader2 className="h-3 w-3 animate-spin text-orange-500" />
+                <span>Loading {count === "all" ? "all" : count} posts...</span>
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-slate-500">
+            {data.requestedCount === "all" ? "All-time activity" : "Recent activity"} from @{data.account.username}
+            {" · "}
+            {totals.posts} post{totals.posts === 1 ? "" : "s"} analyzed
           </p>
-          {followers !== null && (
-            // Kept out of the tile row below: that row sums the selected posts,
-            // whereas this is a current account-level total.
-            <p className="mt-1 text-sm text-muted">
-              {followers.toLocaleString()} followers
-            </p>
-          )}
         </div>
-        <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
-          <label className="flex flex-col gap-2 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Range
-            </span>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Post Filter Dropdown */}
+          <div className="relative">
             <select
               value={count}
+              disabled={isFiltering}
               onChange={(e) => handleCountChange(e.target.value)}
-              className="border-0 bg-transparent py-2 pr-1 text-sm text-foreground outline-none"
+              className={`h-10 pl-3.5 pr-9 rounded-xl bg-white border text-xs font-semibold transition-all appearance-none cursor-pointer disabled:cursor-wait ${
+                isFiltering
+                  ? "border-orange-300 text-orange-700 bg-orange-50/30 ring-2 ring-orange-100"
+                  : "border-slate-200 text-slate-700 hover:bg-slate-50 focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+              } outline-none`}
             >
               {COUNT_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -140,7 +179,16 @@ export default function OverviewPage() {
                 </option>
               ))}
             </select>
-          </label>
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-center">
+              {isFiltering ? (
+                <Loader2 className="h-3.5 w-3.5 text-orange-500 animate-spin" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+              )}
+            </div>
+          </div>
+
+          {/* Account Selector */}
           {accounts.length > 1 && (
             <AccountSelect
               accounts={accounts.map((a) => ({
@@ -156,108 +204,209 @@ export default function OverviewPage() {
       </div>
 
       {!insightsAvailable && (
-        <div className="panel rounded p-4 border border-border">
-          <p className="text-sm text-foreground">
-            Views, reach, saved and shares need the insights permission.
-          </p>
-          <p className="text-sm text-muted mt-1">
-            Reconnect your account to grant it — likes and comments are shown in
-            the meantime.
-          </p>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-amber-900">
+              Media insights permission needed for full reach data
+            </p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              Reconnect your Instagram account to unlock views, reach, and shares metrics.
+            </p>
+          </div>
           <a
             href="/api/instagram/connect"
-            className="mt-3 inline-block text-sm text-accent hover:underline"
+            className="inline-flex items-center px-4 py-2 rounded-xl bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 transition-colors shrink-0 shadow-xs"
           >
             Reconnect Instagram
           </a>
         </div>
       )}
 
-      {/* Aggregate totals */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-        <StatCard label="Views" value={formatNumber(totals.views)} />
-        <StatCard label="Reach" value={formatNumber(totals.reach)} />
-        <StatCard label="Likes" value={formatNumber(totals.likes)} />
-        <StatCard label="Comments" value={formatNumber(totals.comments)} />
-        <StatCard label="Saved" value={formatNumber(totals.saved)} />
-        <StatCard label="Shares" value={formatNumber(totals.shares)} />
+      {/* Aggregate 6 Stats Row with Shimmer Loading State */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+        <StatCard
+          title="Views"
+          value={formatNumber(totals.views)}
+          icon={Eye}
+          accent="violet"
+          loading={isFiltering}
+        />
+        <StatCard
+          title="Reach"
+          value={formatNumber(totals.reach)}
+          icon={Users}
+          accent="orange"
+          loading={isFiltering}
+        />
+        <StatCard
+          title="Likes"
+          value={formatNumber(totals.likes)}
+          icon={Heart}
+          accent="rose"
+          loading={isFiltering}
+        />
+        <StatCard
+          title="Comments"
+          value={formatNumber(totals.comments)}
+          icon={MessageCircle}
+          accent="blue"
+          loading={isFiltering}
+        />
+        <StatCard
+          title="Saved"
+          value={formatNumber(totals.saved)}
+          icon={Bookmark}
+          accent="amber"
+          loading={isFiltering}
+        />
+        <StatCard
+          title="Shares"
+          value={formatNumber(totals.shares)}
+          icon={Share2}
+          accent="emerald"
+          loading={isFiltering}
+        />
       </div>
 
-      {/* Follower trend — account-level, independent of the post range */}
-      <FollowerChart data={followerHistory} followers={followers} />
+      {/* Follower Trend Chart */}
+      <div
+        className={`transition-opacity duration-300 ${
+          isFiltering ? "opacity-60 pointer-events-none" : "opacity-100"
+        }`}
+      >
+        <FollowerChart data={followerHistory} followers={followers} />
+      </div>
 
-      {/* Per-post table */}
-      <div className="panel rounded p-4 sm:p-6">
-        <h2 className="text-sm font-semibold text-foreground mb-4">Posts</h2>
-        {posts.length === 0 ? (
-          <p className="text-sm text-muted py-8 text-center">No posts found</p>
-        ) : (
-          // Eight metric columns can't compress into a phone; let the table keep
-          // its natural width and scroll inside the panel instead.
-          <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-wide text-zinc-500 border-b border-border">
-                  <th className="py-2 pr-4 font-medium">Post</th>
-                  <th className="py-2 px-3 font-medium text-right">Views</th>
-                  <th className="py-2 px-3 font-medium text-right">Reach</th>
-                  <th className="py-2 px-3 font-medium text-right">Likes</th>
-                  <th className="py-2 px-3 font-medium text-right">Comments</th>
-                  <th className="py-2 px-3 font-medium text-right">Saved</th>
-                  <th className="py-2 px-3 font-medium text-right">Shares</th>
-                  <th className="py-2 pl-3 font-medium text-right">Date</th>
-                </tr>
-              </thead>
+      {/* Per-Post Analytics Table with Smooth Loading Transitions */}
+      <AnimatedCard className="overflow-hidden p-0 border border-slate-100 shadow-card">
+        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">
+              Recent posts &amp; performance
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Metrics across your feed posts and reels ({currentOptionLabel})
+            </p>
+          </div>
+          {isFiltering && (
+            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-orange-500" />
+              <span>Updating table...</span>
+            </div>
+          )}
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wider text-slate-400 border-b border-slate-100 bg-slate-50/50">
+                <th className="py-3 px-6 font-semibold">Post</th>
+                <th className="py-3 px-3 font-semibold text-right">Views</th>
+                <th className="py-3 px-3 font-semibold text-right">Reach</th>
+                <th className="py-3 px-3 font-semibold text-right">Likes</th>
+                <th className="py-3 px-3 font-semibold text-right">Comments</th>
+                <th className="py-3 px-3 font-semibold text-right">Saved</th>
+                <th className="py-3 px-3 font-semibold text-right">Shares</th>
+                <th className="py-3 pr-6 pl-3 font-semibold text-right">Date</th>
+              </tr>
+            </thead>
+
+            {isFiltering ? (
+              <tbody className="divide-y divide-slate-50">
+                {[...Array(6)].map((_, idx) => (
+                  <tr key={idx} className="animate-pulse">
+                    <td className="py-3.5 px-6 max-w-xs">
+                      <div className="space-y-1.5">
+                        <div className="h-4 bg-slate-200/80 rounded-md w-3/4" />
+                        <div className="h-3 bg-slate-100 rounded-md w-1/3" />
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-3 text-right">
+                      <div className="h-4 bg-slate-100 rounded-md w-12 ml-auto" />
+                    </td>
+                    <td className="py-3.5 px-3 text-right">
+                      <div className="h-4 bg-slate-100 rounded-md w-12 ml-auto" />
+                    </td>
+                    <td className="py-3.5 px-3 text-right">
+                      <div className="h-4 bg-slate-100 rounded-md w-10 ml-auto" />
+                    </td>
+                    <td className="py-3.5 px-3 text-right">
+                      <div className="h-4 bg-slate-100 rounded-md w-10 ml-auto" />
+                    </td>
+                    <td className="py-3.5 px-3 text-right">
+                      <div className="h-4 bg-slate-100 rounded-md w-10 ml-auto" />
+                    </td>
+                    <td className="py-3.5 px-3 text-right">
+                      <div className="h-4 bg-slate-100 rounded-md w-10 ml-auto" />
+                    </td>
+                    <td className="py-3.5 pr-6 pl-3 text-right">
+                      <div className="h-3 bg-slate-100 rounded-md w-14 ml-auto" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            ) : posts.length === 0 ? (
               <tbody>
+                <tr>
+                  <td colSpan={8} className="text-sm text-slate-400 py-12 text-center">
+                    No posts found for this time range.
+                  </td>
+                </tr>
+              </tbody>
+            ) : (
+              <tbody className="divide-y divide-slate-50 animate-in fade-in duration-200">
                 {posts.map((p) => (
                   <tr
                     key={p.id}
-                    className="border-b border-border last:border-0"
+                    className="hover:bg-slate-50/70 transition-colors"
                   >
-                    <td className="py-3 pr-4 max-w-xs">
+                    <td className="py-3 px-6 max-w-xs">
                       {p.permalink ? (
                         <a
                           href={p.permalink}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-foreground hover:text-accent truncate block"
+                          className="text-slate-900 font-semibold hover:text-orange-600 truncate flex items-center gap-1.5 group"
                         >
-                          {p.caption || `${p.mediaType} post`}
+                          <span className="truncate">
+                            {p.caption || `${p.mediaType} post`}
+                          </span>
+                          <ExternalLink className="h-3 w-3 text-slate-400 group-hover:text-orange-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </a>
                       ) : (
-                        <span className="text-foreground truncate block">
+                        <span className="text-slate-900 font-medium truncate block">
                           {p.caption || `${p.mediaType} post`}
                         </span>
                       )}
                     </td>
-                    <td className="py-3 px-3 text-right text-muted">
+                    <td className="py-3 px-3 text-right text-slate-600 font-medium">
                       {formatNumber(p.views)}
                     </td>
-                    <td className="py-3 px-3 text-right text-muted">
+                    <td className="py-3 px-3 text-right text-slate-600 font-medium">
                       {formatNumber(p.reach)}
                     </td>
-                    <td className="py-3 px-3 text-right text-muted">
+                    <td className="py-3 px-3 text-right text-slate-600 font-medium">
                       {formatNumber(p.likes)}
                     </td>
-                    <td className="py-3 px-3 text-right text-muted">
+                    <td className="py-3 px-3 text-right text-slate-600 font-medium">
                       {formatNumber(p.comments)}
                     </td>
-                    <td className="py-3 px-3 text-right text-muted">
+                    <td className="py-3 px-3 text-right text-slate-600 font-medium">
                       {formatNumber(p.saved)}
                     </td>
-                    <td className="py-3 px-3 text-right text-muted">
+                    <td className="py-3 px-3 text-right text-slate-600 font-medium">
                       {formatNumber(p.shares)}
                     </td>
-                    <td className="py-3 pl-3 text-right text-zinc-500">
+                    <td className="py-3 pr-6 pl-3 text-right text-xs text-slate-400 whitespace-nowrap">
                       {formatDate(p.timestamp)}
                     </td>
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+            )}
+          </table>
+        </div>
+      </AnimatedCard>
     </div>
   );
 }

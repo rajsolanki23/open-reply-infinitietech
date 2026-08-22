@@ -1,5 +1,16 @@
 import { createHmac, timingSafeEqual } from "crypto";
 
+export function verifyWebhookChallenge(
+  token: string | null,
+  verifyToken: string | undefined
+): boolean {
+  if (!token || !verifyToken) return false;
+  const tokenBuffer = Buffer.from(token);
+  const verifyBuffer = Buffer.from(verifyToken);
+  if (tokenBuffer.length !== verifyBuffer.length) return false;
+  return timingSafeEqual(tokenBuffer, verifyBuffer);
+}
+
 export function verifyWebhookSignature(
   payload: string,
   signature: string | null
@@ -16,16 +27,20 @@ export function verifyWebhookSignature(
   ].filter((s): s is string => Boolean(s));
 
   if (secrets.length === 0) {
-    throw new Error(
-      "FACEBOOK_APP_SECRET or INSTAGRAM_APP_SECRET is required to verify webhooks"
+    console.warn(
+      "[Webhook] FACEBOOK_APP_SECRET or INSTAGRAM_APP_SECRET is required to verify webhooks"
     );
+    return false;
   }
 
   return secrets.some((secret) => {
     const expected =
       "sha256=" + createHmac("sha256", secret).update(payload).digest("hex");
     try {
-      return timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+      const sigBuffer = Buffer.from(signature);
+      const expBuffer = Buffer.from(expected);
+      if (sigBuffer.length !== expBuffer.length) return false;
+      return timingSafeEqual(sigBuffer, expBuffer);
     } catch {
       return false;
     }

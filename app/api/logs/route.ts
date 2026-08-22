@@ -40,7 +40,14 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: "desc" },
       skip,
       take: limit,
-      include: {
+      select: {
+        id: true,
+        commenterId: true,
+        commenterName: true,
+        commentText: true,
+        status: true,
+        errorMessage: true,
+        createdAt: true,
         automation: { select: { name: true, keywords: true } },
         instagramAccount: { select: { username: true } },
       },
@@ -48,16 +55,23 @@ export async function GET(request: NextRequest) {
     prisma.dmLog.count({ where }),
   ]);
 
-  return NextResponse.json({
-    success: true,
-    data: {
-      logs,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
+  return NextResponse.json(
+    {
+      success: true,
+      data: {
+        logs,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
       },
     },
-  });
+    {
+      headers: {
+        "Cache-Control": "private, max-age=5, stale-while-revalidate=15",
+      },
+    }
+  );
 }

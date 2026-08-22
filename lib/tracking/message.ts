@@ -1,3 +1,5 @@
+import { getBaseUrl } from "@/lib/env";
+
 export interface MessageTrackedLink {
   slug: string;
   destinationUrl: string;
@@ -56,7 +58,7 @@ export function buildTrackedUrl(slug: string, baseUrl?: string) {
     baseUrl ??
     (typeof window !== "undefined"
       ? window.location.origin
-      : process.env.NEXTAUTH_URL ?? "http://localhost:3000");
+      : getBaseUrl());
 
   return `${resolvedBaseUrl.replace(/\/$/, "")}/r/${slug}`;
 }

@@ -33,6 +33,20 @@ export async function GET(request: NextRequest) {
     ? { instagramAccountId: selectedAccountId }
     : {};
 
+  // Build the 7 daily date ranges
+  const dayIndices = [6, 5, 4, 3, 2, 1, 0];
+  const dailyRanges = dayIndices.map((i) => {
+    const dayStart = new Date(todayStart);
+    dayStart.setDate(dayStart.getDate() - i);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+    return {
+      date: dayStart.toLocaleDateString("en-US", { weekday: "short" }),
+      dayStart,
+      dayEnd,
+    };
+  });
+
   const [
     workspace,
     instagramAccount,
@@ -50,6 +64,7 @@ export async function GET(request: NextRequest) {
     recentLogs,
     user,
     contactRows,
+    ...dailyCounts
   ] = await Promise.all([
     prisma.workspace.findUnique({
       where: { id: workspaceId },
@@ -130,7 +145,12 @@ export async function GET(request: NextRequest) {
       where: { workspaceId, ...accountFilter },
       orderBy: { createdAt: "desc" },
       take: 10,
-      include: {
+      select: {
+        id: true,
+        commenterName: true,
+        commentText: true,
+        status: true,
+        createdAt: true,
         automation: { select: { name: true } },
         instagramAccount: { select: { username: true } },
       },
@@ -141,35 +161,30 @@ export async function GET(request: NextRequest) {
           select: { name: true, email: true },
         })
       : Promise.resolve(null),
-    // Distinct people who have interacted, counted as "contacts".
+    // Distinct people who have interacted, counted as "contacts" with limit
     prisma.dmLog.findMany({
       where: { workspaceId, ...accountFilter },
       distinct: ["commenterId"],
       select: { commenterId: true },
+      take: 5000,
     }),
+    // 7 parallel daily DM counts
+    ...dailyRanges.map((range) =>
+      prisma.dmLog.count({
+        where: {
+          workspaceId,
+          status: "SENT",
+          createdAt: { gte: range.dayStart, lt: range.dayEnd },
+          ...accountFilter,
+        },
+      })
+    ),
   ]);
 
-  const dailyDMs: { date: string; count: number }[] = [];
-  for (let i = 6; i >= 0; i--) {
-    const dayStart = new Date(todayStart);
-    dayStart.setDate(dayStart.getDate() - i);
-    const dayEnd = new Date(dayStart);
-    dayEnd.setDate(dayEnd.getDate() + 1);
-
-    const count = await prisma.dmLog.count({
-      where: {
-        workspaceId,
-        status: "SENT",
-        createdAt: { gte: dayStart, lt: dayEnd },
-        ...accountFilter,
-      },
-    });
-
-    dailyDMs.push({
-      date: dayStart.toLocaleDateString("en-US", { weekday: "short" }),
-      count,
-    });
-  }
+  const dailyDMs = dailyRanges.map((range, idx) => ({
+    date: range.date,
+    count: dailyCounts[idx] as number,
+  }));
 
   const monthlyStatusSummary = summarizeDmStatuses(
     dmStatusCountsThisMonth.map((row) => ({
@@ -189,29 +204,36 @@ export async function GET(request: NextRequest) {
     user?.email?.split("@")[0] ||
     null;
 
-  return NextResponse.json({
-    success: true,
-    data: {
-      userName: firstName,
-      contactsCount: contactRows.length,
-      workspace,
-      instagramAccount,
-      instagramAccounts,
-      selectedInstagramAccountId: selectedAccountId,
-      totalAutomations,
-      activeAutomations,
-      dmsSentToday,
-      dmsSentWeek,
-      dmsSentMonth,
-      dmsSkippedMonth: monthlyStatusSummary.skipped,
-      dmsFailedMonth: monthlyStatusSummary.failed,
-      totalDMs,
-      clicksThisMonth,
-      totalClicks,
-      ctrThisMonth: calculateCtr(clicksThisMonth, dmsSentMonth),
-      topKeywords,
-      dailyDMs,
-      recentLogs,
+  return NextResponse.json(
+    {
+      success: true,
+      data: {
+        userName: firstName,
+        contactsCount: contactRows.length,
+        workspace,
+        instagramAccount,
+        instagramAccounts,
+        selectedInstagramAccountId: selectedAccountId,
+        totalAutomations,
+        activeAutomations,
+        dmsSentToday,
+        dmsSentWeek,
+        dmsSentMonth,
+        dmsSkippedMonth: monthlyStatusSummary.skipped,
+        dmsFailedMonth: monthlyStatusSummary.failed,
+        totalDMs,
+        clicksThisMonth,
+        totalClicks,
+        ctrThisMonth: calculateCtr(clicksThisMonth, dmsSentMonth),
+        topKeywords,
+        dailyDMs,
+        recentLogs,
+      },
     },
-  });
+    {
+      headers: {
+        "Cache-Control": "private, max-age=10, stale-while-revalidate=30",
+      },
+    }
+  );
 }

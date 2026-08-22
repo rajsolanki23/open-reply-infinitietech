@@ -6,10 +6,13 @@ import {
   parseMessageEvents,
   parsePostbackEvents,
   parseReadEvents,
+  verifyWebhookChallenge,
   verifyWebhookSignature,
 } from "@/lib/meta/webhook";
 import { MESSAGE_JOB_NAME, POSTBACK_JOB_NAME } from "@/lib/queue/client";
 import { Prisma } from "@/app/generated/prisma/client";
+import { processDirectJob } from "@/lib/queue/dm-worker";
+import { isWorkerEnabled, recordWorkerHeartbeat } from "@/lib/ops/worker-health";
 
 const OPENING_DM_READ_FALLBACK_DELAY_MS = 5 * 60 * 1000;
 
@@ -19,7 +22,10 @@ export async function GET(request: NextRequest) {
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  if (mode === "subscribe" && token === process.env.WEBHOOK_VERIFY_TOKEN) {
+  if (
+    mode === "subscribe" &&
+    verifyWebhookChallenge(token, process.env.WEBHOOK_VERIFY_TOKEN)
+  ) {
     return new NextResponse(challenge, { status: 200 });
   }
 
@@ -34,9 +40,6 @@ export async function POST(request: NextRequest) {
   const signature = request.headers.get("x-hub-signature-256");
 
   if (!verifyWebhookSignature(rawBody, signature)) {
-    // Record the attempt so a signature mismatch is visible rather than a
-    // silent 401. This is the common symptom of FACEBOOK_APP_SECRET being
-    // set to the wrong app's secret for the webhook's signing key.
     await prisma.operationalEvent
       .create({
         data: {
@@ -79,6 +82,15 @@ export async function POST(request: NextRequest) {
   });
 
   try {
+    const workerActive = await isWorkerEnabled();
+    if (workerActive) {
+      void recordWorkerHeartbeat({
+        pid: process.pid || 1,
+        hostname: process.env.VERCEL ? "vercel-webhook" : "server-webhook",
+        startedAt: new Date().toISOString(),
+      });
+    }
+
     const commentEvents = parseCommentEvents(
       payload as Parameters<typeof parseCommentEvents>[0]
     );
@@ -90,21 +102,23 @@ export async function POST(request: NextRequest) {
         select: { workspaceId: true },
       });
 
-      await queue.add(
-        "process-comment",
-        {
-          instagramAccountId: event.instagramAccountId,
-          commentId: event.commentId,
-          commentText: event.commentText,
-          commenterId: event.commenterId,
-          commenterName: event.commenterName,
-          mediaId: event.mediaId,
-          source: "WEBHOOK",
-        },
-        {
-          jobId: `comment_${event.instagramAccountId}_${event.commentId}`,
-        }
-      );
+      const jobData = {
+        instagramAccountId: event.instagramAccountId,
+        commentId: event.commentId,
+        commentText: event.commentText,
+        commenterId: event.commenterId,
+        commenterName: event.commenterName,
+        mediaId: event.mediaId,
+        source: "WEBHOOK" as const,
+      };
+      const jobId = `comment_${event.instagramAccountId}_${event.commentId}`;
+
+      await queue.add("process-comment", jobData, { jobId });
+
+      // Direct in-process execution on Vercel Serverless if worker is enabled
+      if (workerActive) {
+        void processDirectJob("process-comment", jobData, jobId);
+      }
 
       if (account) {
         await prisma.webhookEvent.update({
@@ -120,22 +134,22 @@ export async function POST(request: NextRequest) {
     );
 
     for (const event of postbackEvents) {
-      await queue.add(
-        POSTBACK_JOB_NAME,
-        {
-          instagramAccountId: event.instagramAccountId,
-          userId: event.userId,
-          payload: event.payload,
-          mid: event.mid,
-        },
-        {
-          // BullMQ forbids ":" in custom job ids, and the payload is
-          // "reveal:<id>", so build with underscores and strip any colons.
-          jobId: `postback_${event.instagramAccountId}_${event.userId}_${(
-            event.mid ?? event.payload
-          ).replace(/:/g, "_")}`,
-        }
-      );
+      const jobData = {
+        instagramAccountId: event.instagramAccountId,
+        userId: event.userId,
+        payload: event.payload,
+        mid: event.mid,
+      };
+      const jobId = `postback_${event.instagramAccountId}_${event.userId}_${(
+        event.mid ?? event.payload
+      ).replace(/:/g, "_")}`;
+
+      await queue.add(POSTBACK_JOB_NAME, jobData, { jobId });
+
+      // Direct in-process execution on Vercel Serverless if worker is enabled
+      if (workerActive) {
+        void processDirectJob(POSTBACK_JOB_NAME, jobData, jobId);
+      }
     }
 
     // Inbound DMs → keyword-triggered autoreply.
@@ -149,24 +163,22 @@ export async function POST(request: NextRequest) {
         select: { workspaceId: true },
       });
 
-      await queue.add(
-        MESSAGE_JOB_NAME,
-        {
-          instagramAccountId: event.instagramAccountId,
-          messageId: event.messageId,
-          messageText: event.messageText,
-          senderId: event.senderId,
-        },
-        {
-          // Message ids can contain characters BullMQ rejects in a job id (":"
-          // in particular). base64url encodes into exactly the allowed alphabet
-          // and stays injective — substituting invalid characters would let two
-          // distinct mids collapse onto one job id, silently dropping a reply.
-          jobId: `message_${event.instagramAccountId}_${Buffer.from(
-            event.messageId
-          ).toString("base64url")}`,
-        }
-      );
+      const jobData = {
+        instagramAccountId: event.instagramAccountId,
+        messageId: event.messageId,
+        messageText: event.messageText,
+        senderId: event.senderId,
+      };
+      const jobId = `message_${event.instagramAccountId}_${Buffer.from(
+        event.messageId
+      ).toString("base64url")}`;
+
+      await queue.add(MESSAGE_JOB_NAME, jobData, { jobId });
+
+      // Direct in-process execution on Vercel Serverless if worker is enabled
+      if (workerActive) {
+        void processDirectJob(MESSAGE_JOB_NAME, jobData, jobId);
+      }
 
       if (account) {
         await prisma.webhookEvent.update({

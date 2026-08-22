@@ -1,39 +1,31 @@
 "use client";
 
 /**
- * Followers Over Time
+ * Followers Over Time Chart
  *
- * Single-series line chart over stored daily snapshots. Deliberately separate
- * from the Overview stat tiles: those sum the selected posts, while this is an
- * account-level total that ignores the post range.
- *
- * History depth is limited by what has been snapshotted — Instagram only serves
- * ~30 days of account insights, so earlier days exist only if this instance was
- * already running then.
+ * Single-series line chart over stored daily snapshots with violet-to-pink gradient line,
+ * soft area gradient fill, and table view toggle.
  */
 
 import { useState } from "react";
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import dynamic from "next/dynamic";
+import { AnimatedCard } from "@/components/ui-refined/animated-card";
+import type { FollowerChartPoint } from "@/components/charts/follower-area-chart";
 
-export interface FollowerChartPoint {
-  date: string;
-  followers: number;
-  delta: number | null;
-}
+const FollowerAreaChart = dynamic(
+  () => import("@/components/charts/follower-area-chart"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-full w-full bg-slate-100/60 rounded-xl animate-pulse" />
+    ),
+  }
+);
 
-// Colors read against the light chart surface (#ffffff): the accent line clears
-// 3:1 contrast and grid/axis text match the muted/border tokens. See globals.css.
-const SERIES_COLOR = "#f97316";
-const GRID_COLOR = "#e4e4e7";
-const AXIS_TEXT = "#71717a";
+export type { FollowerChartPoint };
+
+const GRID_COLOR = "#f1f5f9";
+const AXIS_TEXT = "#94a3b8";
 
 function formatCompact(n: number): string {
   if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -42,11 +34,15 @@ function formatCompact(n: number): string {
 }
 
 function formatDay(iso: string): string {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
+  try {
+    return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    });
+  } catch {
+    return iso;
+  }
 }
 
 function formatSigned(n: number): string {
@@ -64,13 +60,13 @@ function ChartTooltip({
   const point = payload[0].payload;
 
   return (
-    <div className="rounded border border-border bg-surface px-3 py-2 text-xs shadow-lg">
-      <p className="text-muted">{formatDay(point.date)}</p>
-      <p className="mt-1 font-semibold text-foreground">
+    <div className="rounded-xl border border-slate-100 bg-white p-3 text-xs shadow-elevated">
+      <p className="text-slate-400 font-medium">{formatDay(point.date)}</p>
+      <p className="mt-1 font-bold text-slate-900 text-sm">
         {point.followers.toLocaleString()} followers
       </p>
       {point.delta !== null && point.delta !== 0 && (
-        <p className={point.delta > 0 ? "text-success" : "text-error"}>
+        <p className={`mt-0.5 font-semibold ${point.delta > 0 ? "text-emerald-600" : "text-rose-600"}`}>
           {formatSigned(point.delta)} that day
         </p>
       )}
@@ -89,26 +85,24 @@ export default function FollowerChart({
 
   const current = followers ?? data.at(-1)?.followers ?? null;
 
-  // Net change across the whole visible window, shown once in the header rather
-  // than labelling every point.
   const net =
     data.length > 1 ? data[data.length - 1].followers - data[0].followers : null;
 
   return (
-    <div className="panel rounded p-4 sm:p-6">
+    <AnimatedCard className="p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-foreground">
-            Followers over time
+        <div className="space-y-0.5">
+          <h2 className="text-base font-semibold text-slate-900">
+            Follower growth
           </h2>
-          <p className="mt-1 text-sm text-muted">
+          <p className="text-sm text-slate-500">
             {current === null
               ? "Follower count unavailable"
-              : `${current.toLocaleString()} now`}
+              : `${current.toLocaleString()} followers now`}
             {net !== null && (
               <>
                 {" · "}
-                <span className={net >= 0 ? "text-success" : "text-error"}>
+                <span className={`font-semibold ${net >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
                   {formatSigned(net)}
                 </span>{" "}
                 over {data.length} days
@@ -116,11 +110,12 @@ export default function FollowerChart({
             )}
           </p>
         </div>
+
         {data.length > 1 && (
           <button
             type="button"
             onClick={() => setShowTable((v) => !v)}
-            className="rounded border border-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-border-hover hover:text-foreground"
+            className="rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-xs cursor-pointer"
           >
             {showTable ? "Show chart" : "Show table"}
           </button>
@@ -128,36 +123,35 @@ export default function FollowerChart({
       </div>
 
       {data.length < 2 ? (
-        <div className="mt-6 rounded border border-border bg-surface/60 p-6 text-center">
-          <p className="text-sm text-foreground">Collecting follower history</p>
-          <p className="mt-1 text-sm text-muted">
+        <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-8 text-center">
+          <p className="text-sm font-semibold text-slate-800">Collecting follower history</p>
+          <p className="mt-1 text-xs text-slate-500 max-w-sm mx-auto">
             {data.length === 0
               ? "No snapshots recorded yet."
               : "One day recorded so far."}{" "}
-            A point is added daily — the chart appears once there are at least
-            two.
+            Daily points are recorded automatically. The chart will render once two days are available.
           </p>
         </div>
       ) : showTable ? (
-        <div className="mt-4 max-h-72 overflow-y-auto">
+        <div className="mt-5 max-h-72 overflow-y-auto rounded-xl border border-slate-100">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-zinc-500">
-                <th className="py-2 pr-4 font-medium">Date</th>
-                <th className="py-2 px-3 font-medium text-right">Followers</th>
-                <th className="py-2 pl-3 font-medium text-right">Change</th>
+              <tr className="border-b border-slate-100 bg-slate-50/50 text-left text-xs uppercase tracking-wider text-slate-400">
+                <th className="py-2.5 px-4 font-semibold">Date</th>
+                <th className="py-2.5 px-4 font-semibold text-right">Followers</th>
+                <th className="py-2.5 px-4 font-semibold text-right">Change</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-50">
               {[...data].reverse().map((p) => (
-                <tr key={p.date} className="border-b border-border last:border-0">
-                  <td className="py-2 pr-4 text-foreground">
+                <tr key={p.date} className="hover:bg-slate-50/50 transition-colors">
+                  <td className="py-2.5 px-4 text-slate-900 font-medium">
                     {formatDay(p.date)}
                   </td>
-                  <td className="py-2 px-3 text-right text-muted">
+                  <td className="py-2.5 px-4 text-right text-slate-600">
                     {p.followers.toLocaleString()}
                   </td>
-                  <td className="py-2 pl-3 text-right text-muted">
+                  <td className={`py-2.5 px-4 text-right font-semibold ${p.delta && p.delta > 0 ? "text-emerald-600" : p.delta && p.delta < 0 ? "text-rose-600" : "text-slate-400"}`}>
                     {p.delta === null ? "—" : formatSigned(p.delta)}
                   </td>
                 </tr>
@@ -166,52 +160,10 @@ export default function FollowerChart({
           </table>
         </div>
       ) : (
-        <div className="mt-6 h-56 sm:h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={data}
-              margin={{ top: 8, right: 16, bottom: 0, left: 0 }}
-            >
-              <CartesianGrid
-                vertical={false}
-                stroke={GRID_COLOR}
-                strokeDasharray="3 3"
-              />
-              <XAxis
-                dataKey="date"
-                tickFormatter={formatDay}
-                tick={{ fill: AXIS_TEXT, fontSize: 12 }}
-                stroke={GRID_COLOR}
-                tickLine={false}
-                minTickGap={24}
-              />
-              <YAxis
-                tickFormatter={formatCompact}
-                tick={{ fill: AXIS_TEXT, fontSize: 12 }}
-                stroke={GRID_COLOR}
-                tickLine={false}
-                width={52}
-                // Followers rarely start near zero, so a zero baseline would
-                // flatten the line into a straight edge.
-                domain={["dataMin - 5", "dataMax + 5"]}
-              />
-              <Tooltip
-                content={<ChartTooltip />}
-                cursor={{ stroke: GRID_COLOR, strokeWidth: 1 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="followers"
-                stroke={SERIES_COLOR}
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4, fill: SERIES_COLOR, stroke: "#ffffff", strokeWidth: 2 }}
-                isAnimationActive={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+        <div className="mt-6 h-60 sm:h-72">
+          <FollowerAreaChart data={data} />
         </div>
       )}
-    </div>
+    </AnimatedCard>
   );
 }

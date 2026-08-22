@@ -1,6 +1,16 @@
 import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
+import { Toaster } from "sonner";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+  preload: true,
+  adjustFontFallback: true,
+});
 
 export const metadata: Metadata = {
   title: "OpenReply - Open source Instagram comment-to-DM automation",
@@ -17,7 +27,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "OpenReply",
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "default",
   },
   icons: {
     icon: [
@@ -29,11 +39,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#18181b",
+  themeColor: "#ffffff",
   width: "device-width",
   initialScale: 1,
-  // Installed on iOS the app owns the full screen, notch included; the safe
-  // area insets below keep content clear of the system UI.
   viewportFit: "cover",
 };
 
@@ -43,13 +51,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full dark">
+    <html lang="en" className={inter.variable}>
       <body
-        className="min-h-full bg-background text-foreground font-sans antialiased"
-        // Clears the home indicator when installed; 0 everywhere else.
+        className="min-h-full bg-white text-slate-900 font-sans antialiased"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         {children}
+        <Toaster
+          position="bottom-right"
+          toastOptions={{
+            className: "rounded-xl border border-slate-100 shadow-elevated bg-white text-slate-900",
+          }}
+        />
         <Analytics />
       </body>
     </html>

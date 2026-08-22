@@ -6,6 +6,15 @@ type RedirectRouteProps = {
   params: Promise<{ slug: string }>;
 };
 
+function isValidHttpUrl(urlString: string): boolean {
+  try {
+    const parsed = new URL(urlString);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export async function GET(request: NextRequest, { params }: RedirectRouteProps) {
   const { slug } = await params;
   const trackedLink = await prisma.trackedLink.findUnique({
@@ -23,7 +32,7 @@ export async function GET(request: NextRequest, { params }: RedirectRouteProps) 
     },
   });
 
-  if (!trackedLink) {
+  if (!trackedLink || !isValidHttpUrl(trackedLink.destinationUrl)) {
     return NextResponse.redirect(new URL("/", request.url), { status: 302 });
   }
 

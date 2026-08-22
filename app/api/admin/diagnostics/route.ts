@@ -1,19 +1,28 @@
 import { NextResponse } from "next/server";
-import { getCurrentWorkspaceId } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
 import { getDMQueue } from "@/lib/queue/client";
 import { getWorkerAlerts, getWorkerHealth } from "@/lib/ops/worker-health";
+import { canManageWorkspace, getCurrentWorkspaceContext } from "@/lib/workspace-access";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const workspaceId = await getCurrentWorkspaceId();
-  if (!workspaceId) {
+  const context = await getCurrentWorkspaceContext();
+  if (!context) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
       { status: 401 }
     );
   }
+
+  if (!canManageWorkspace(context.role)) {
+    return NextResponse.json(
+      { success: false, error: "Forbidden. Admin access required." },
+      { status: 403 }
+    );
+  }
+
+  const { workspaceId } = context;
 
   const [
     queueCounts,
@@ -75,9 +84,7 @@ export async function GET() {
       },
     }),
     prisma.operationalEvent.findMany({
-      where: {
-        OR: [{ workspaceId }, { workspaceId: null }],
-      },
+      where: { workspaceId },
       orderBy: { createdAt: "desc" },
       take: 20,
       select: {

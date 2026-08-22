@@ -222,5 +222,50 @@ export async function resetRateLimit(
   await client.del(key);
 }
 
+/**
+ * Generic fixed-window rate limiter for sensitive authentication / user actions.
+ * @param identifier - Key identifier (e.g. `login:${email}` or `change-password:${userId}`)
+ * @param maxAttempts - Max attempts allowed within window (default: 5)
+ * @param windowSeconds - Window duration in seconds (default: 900 = 15 mins)
+ */
+export async function checkAuthRateLimit(
+  identifier: string,
+  maxAttempts: number = 5,
+  windowSeconds: number = 900
+): Promise<{ allowed: boolean; remaining: number; retryAfterSeconds: number }> {
+  try {
+    const client = getRedis();
+    const key = `rate:auth:${identifier}`;
+    const result = await client.eval(
+      RESERVE_DM_SLOT_SCRIPT,
+      1,
+      key,
+      maxAttempts,
+      windowSeconds
+    );
+    const values = Array.isArray(result) ? result : [];
+    const allowedFlag = toScriptNumber(values[0]);
+    const remaining = toScriptNumber(values[2]);
+
+    if (allowedFlag !== 1) {
+      const ttl = await client.ttl(key);
+      return {
+        allowed: false,
+        remaining: 0,
+        retryAfterSeconds: Math.max(1, ttl),
+      };
+    }
+
+    return {
+      allowed: true,
+      remaining,
+      retryAfterSeconds: 0,
+    };
+  } catch (error) {
+    console.error("[Rate Limiter] Auth rate limit check failed:", error);
+    return { allowed: true, remaining: maxAttempts, retryAfterSeconds: 0 };
+  }
+}
+
 // Export constants for use in tests
 export { RATE_LIMIT_MAX, RATE_LIMIT_WINDOW, REQUEUE_DELAY_MS, MAX_REQUEUE_ATTEMPTS };

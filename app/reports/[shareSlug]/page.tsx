@@ -122,29 +122,29 @@ export default async function ReportPage({ params }: ReportPageProps) {
       <section className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-6 lg:px-8">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <MetricCard
-            label="DMs sent"
+            label="Messages sent"
             value={report.metrics.sent}
-            helper="Private replies successfully sent."
+            helper="Private replies successfully delivered."
           />
           <MetricCard
-            label="Skipped"
+            label="Filtered out"
             value={report.metrics.skipped}
-            helper="Duplicates, limits, or no-send outcomes."
+            helper="Duplicates or comments without target keyword."
           />
           <MetricCard
-            label="Failed"
+            label="Needs retry"
             value={report.metrics.failed}
-            helper="Replies that need operational review."
+            helper="Replies waiting for next retry."
           />
           <MetricCard
-            label="Clicks"
+            label="Link clicks"
             value={report.metrics.clicks}
             helper="Tracked link visits from replies."
           />
           <MetricCard
-            label="CTR"
+            label="Click-through rate"
             value={`${report.metrics.ctr}%`}
-            helper="Clicks divided by sent replies."
+            helper="Link clicks divided by sent replies."
           />
         </div>
 

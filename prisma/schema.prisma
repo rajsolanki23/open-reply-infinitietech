@@ -216,6 +216,8 @@ model Automation {
   @@index([workspaceId])
   @@index([instagramAccountId])
   @@index([postId])
+  @@index([workspaceId, isActive])
+  @@index([workspaceId, createdAt])
 }
 
 model DmLog {
@@ -252,6 +254,10 @@ model DmLog {
   @@index([automationId])
   @@index([instagramAccountId])
   @@index([status])
+  @@index([workspaceId, status])
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, status, createdAt])
+  @@index([workspaceId, matchedKeyword])
 }
 
 // Every comment the system has seen, from either the webhook or the polling
@@ -326,6 +332,8 @@ model WebhookEvent {
 
   @@index([workspaceId])
   @@index([status])
+  @@index([workspaceId, status])
+  @@index([workspaceId, createdAt])
 }
 
 model OperationalEvent {

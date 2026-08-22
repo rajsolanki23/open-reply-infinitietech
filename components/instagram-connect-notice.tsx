@@ -1,13 +1,23 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
+import { AlertCircle, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 type Tone = "error" | "warning" | "success";
 
-const TONE_CLASSES: Record<Tone, string> = {
-  error: "border-error/20 bg-error/10 text-error",
-  warning: "border-warning/20 bg-warning/10 text-warning",
-  success: "border-success/20 bg-success/10 text-success",
+const TONE_CLASSES: Record<Tone, { container: string; icon: typeof AlertCircle }> = {
+  error: {
+    container: "border-rose-200 bg-rose-50/80 text-rose-800",
+    icon: AlertCircle,
+  },
+  warning: {
+    container: "border-amber-200 bg-amber-50/80 text-amber-800",
+    icon: AlertTriangle,
+  },
+  success: {
+    container: "border-emerald-200 bg-emerald-50/80 text-emerald-800",
+    icon: CheckCircle2,
+  },
 };
 
 const MESSAGES: Record<string, { tone: Tone; title: string; detail: string }> = {
@@ -21,11 +31,11 @@ const MESSAGES: Record<string, { tone: Tone; title: string; detail: string }> = 
     tone: "error",
     title: "Instagram connection expired",
     detail:
-      "The login link was missing or older than 10 minutes. Click Connect Instagram to start a fresh attempt.",
+      "The login link was older than 10 minutes. Click Connect Instagram to start a fresh attempt.",
   },
   forbidden: {
     tone: "error",
-    title: "Not permitted",
+    title: "Permission required",
     detail:
       "Only workspace owners and admins can connect an Instagram account.",
   },
@@ -49,29 +59,23 @@ export function InstagramConnectNotice() {
       .filter(Boolean);
 
     return (
-      <Notice tone="error" title="Instagram app not configured">
+      <Notice tone="warning" title="Instagram settings need updating">
         <p>
           Set{" "}
           {missing.length > 0
-            ? "these environment variables"
-            : "the required environment variables"}{" "}
+            ? "these configuration settings"
+            : "the required configuration settings"}{" "}
           and restart the server:
         </p>
         {missing.length > 0 && (
           <ul className="mt-2 space-y-1">
             {missing.map((name) => (
-              <li key={name} className="font-mono text-xs">
+              <li key={name} className="font-mono text-xs text-amber-900 bg-amber-100/60 px-2 py-0.5 rounded-md inline-block mr-1">
                 {name}
               </li>
             ))}
           </ul>
         )}
-        <p className="mt-2">
-          See <span className="font-mono text-xs">docs/setup.md</span> for how to
-          obtain each value. Note that{" "}
-          <span className="font-mono text-xs">ENCRYPTION_KEY</span> must be a
-          64-character hex string.
-        </p>
       </Notice>
     );
   }
@@ -80,11 +84,9 @@ export function InstagramConnectNotice() {
     const reason = searchParams.get("reason");
 
     return (
-      <Notice tone="error" title="Instagram connection failed">
+      <Notice tone="error" title="Instagram connection could not be completed">
         <p>
-          Instagram accepted the login but the connection could not be
-          completed. This is usually a mismatched redirect URI or an app that is
-          missing the required permissions.
+          Instagram accepted the login but the connection could not be completed. Please check your account permissions and try reconnecting.
         </p>
         {reason && (
           <p className="mt-2 font-mono text-xs break-words opacity-80">
@@ -114,10 +116,18 @@ function Notice({
   title: string;
   children: React.ReactNode;
 }) {
+  const config = TONE_CLASSES[tone];
+  const Icon = config.icon;
+
   return (
-    <div className={`rounded border p-4 text-sm ${TONE_CLASSES[tone]}`}>
-      <p className="font-semibold">{title}</p>
-      <div className="mt-1 opacity-90">{children}</div>
+    <div className={`rounded-2xl border p-4 sm:p-5 text-sm shadow-xs ${config.container}`}>
+      <div className="flex items-start gap-3">
+        <Icon className="h-5 w-5 shrink-0 mt-0.5" />
+        <div className="space-y-1 flex-1">
+          <p className="font-semibold text-slate-900">{title}</p>
+          <div className="text-xs sm:text-sm leading-relaxed">{children}</div>
+        </div>
+      </div>
     </div>
   );
 }

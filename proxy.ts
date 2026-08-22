@@ -34,7 +34,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (isLogin && isAuthenticated) {
+  if (isLogin && isAuthenticated && !request.nextUrl.searchParams.has("callbackUrl") && !request.nextUrl.searchParams.has("mode")) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 

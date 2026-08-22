@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { getBaseUrl } from "@/lib/env";
 
 const INVITE_TTL_DAYS = 14;
 
@@ -21,7 +22,7 @@ export function buildInvitationUrl(token: string, baseUrl?: string) {
     baseUrl ??
     (typeof window !== "undefined"
       ? window.location.origin
-      : process.env.NEXTAUTH_URL ?? "http://localhost:3000");
+      : getBaseUrl());
 
   return `${resolvedBaseUrl.replace(/\/$/, "")}/invite/${token}`;
 }

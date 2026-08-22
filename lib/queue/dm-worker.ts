@@ -32,7 +32,12 @@ import {
   releaseWorkspaceDMReservation,
   reserveWorkspaceDMSend,
 } from "@/lib/billing/usage";
-import { recordWorkerAlert } from "@/lib/ops/worker-health";
+import {
+  recordWorkerAlert,
+  recordWorkerHeartbeat,
+  isWorkerEnabled,
+} from "@/lib/ops/worker-health";
+import { reconcileComments } from "@/lib/polling/comment-reconciler";
 import {
   buildTrackedUrl,
   renderMessageWithTracking,
@@ -1282,5 +1287,113 @@ export function createDMWorker(): Worker<DmQueueJob> {
   });
 
   return worker;
+}
+
+/**
+ * Process a DM job directly in-process.
+ * Used on Vercel Serverless to deliver DMs instantly without waiting for a background worker.
+ */
+export async function processDirectJob(
+  name: string,
+  data: DmQueueJob,
+  jobId?: string
+): Promise<void> {
+  const syntheticJob = {
+    name,
+    data,
+    id: jobId ?? `direct_${Date.now()}`,
+    attemptsMade: 0,
+    opts: {},
+  } as unknown as Job<DmQueueJob>;
+
+  try {
+    await processJob(syntheticJob);
+  } catch (error) {
+    console.error(
+      `[DM Worker Direct] Job ${syntheticJob.id} failed:`,
+      formatError(error)
+    );
+    await recordWorkerFailure(
+      syntheticJob,
+      error instanceof Error ? error : new Error(String(error))
+    );
+  }
+}
+
+/**
+ * Drain waiting queue jobs in serverless or sync context.
+ */
+export async function drainWaitingJobs(
+  limit = 25
+): Promise<{ processed: number; failed: number }> {
+  let processed = 0;
+  let failed = 0;
+
+  try {
+    const queue = getDMQueue();
+    const waitingJobs = await queue.getJobs(["waiting"], 0, Math.max(0, limit - 1));
+
+    for (const job of waitingJobs) {
+      try {
+        await processJob(job);
+        await job.remove();
+        processed++;
+      } catch (err) {
+        failed++;
+        console.error(
+          `[DM Worker Drain] Job ${job.id} failed during drain:`,
+          err
+        );
+        await recordWorkerFailure(
+          job,
+          err instanceof Error ? err : new Error(String(err))
+        );
+      }
+    }
+  } catch (err) {
+    console.error("[DM Worker Drain] Error draining waiting queue:", err);
+  }
+
+  return { processed, failed };
+}
+
+/**
+ * Run full serverless sync: renews heartbeat, drains queue, and reconciles comments.
+ */
+export async function runWorkerSyncNow(): Promise<{
+  processed: number;
+  failed: number;
+  reconciled: boolean;
+  enabled: boolean;
+}> {
+  const enabled = await isWorkerEnabled();
+  if (!enabled) {
+    return { processed: 0, failed: 0, reconciled: false, enabled: false };
+  }
+
+  // Renew live heartbeat so health check is immediately active
+  await recordWorkerHeartbeat({
+    pid: process.pid || 1,
+    hostname: process.env.VERCEL ? "vercel-sync" : "server-sync",
+    startedAt: new Date().toISOString(),
+  });
+
+  // Drain any waiting jobs in Redis queue
+  const drainResult = await drainWaitingJobs(30);
+
+  // Reconcile comments for safety net
+  let reconciled = false;
+  try {
+    await reconcileComments();
+    reconciled = true;
+  } catch (err) {
+    console.error("[Worker Sync] Comment reconciliation error:", err);
+  }
+
+  return {
+    ...drainResult,
+    reconciled,
+    enabled: true,
+  };
 }
 

@@ -1,83 +1,181 @@
 @import "tailwindcss";
 
-/* ManyChat Alternative — Design System
-   Plain and functional. No gradients, glass, glow, or animation. */
-
-@theme inline {
+@theme {
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
+  --shadow-card-hover: 0 8px 30px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04);
+  --shadow-elevated: 0 12px 40px rgba(0,0,0,0.1);
+  --shadow-glow: 0 4px 20px rgba(249,115,22,0.3);
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
   --color-background: #ffffff;
-  --color-foreground: #18181b;
-  --color-surface: #f7f7f8;
-  --color-surface-hover: #efeff1;
-  --color-border: #e4e4e7;
-  --color-border-hover: #d4d4d8;
-  --color-muted: #71717a;
+  --color-foreground: #0f172a;
+  --color-surface: #f8fafc;
+  --color-surface-hover: #f1f5f9;
+  --color-border: #f1f5f9;
+  --color-border-hover: #e2e8f0;
+  --color-muted: #64748b;
   --color-accent: #f97316;
   --color-accent-hover: #ea580c;
-  --color-success: #16a34a;
-  --color-error: #dc2626;
-  --color-warning: #d97706;
-  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, monospace;
+  --color-success: #10b981;
+  --color-error: #f43f5e;
+  --color-warning: #f59e0b;
 }
 
-html {
-  color-scheme: light;
+@layer base {
+  body {
+    background-color: #ffffff;
+    color: #0f172a;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Light theme default and smooth scrolling */
+  html {
+    color-scheme: light;
+    scroll-behavior: smooth;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+
+  /* Phone mock preview scrollbar */
+  .preview-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
+  }
+  .preview-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .preview-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .preview-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.18);
+    border-radius: 4px;
+  }
+  .preview-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.35);
+  }
 }
 
-body {
-  background: var(--color-background);
-  color: var(--color-foreground);
-  font-family: var(--font-sans);
+@layer utilities {
+  .gradient-primary {
+    background-image: linear-gradient(135deg, #f97316 0%, #fb923c 100%);
+  }
+  .gradient-accent {
+    background-image: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+  }
+  .gradient-emerald {
+    background-image: linear-gradient(135deg, #34d399 0%, #059669 100%);
+  }
+  .text-gradient {
+    background-image: linear-gradient(to right, #ea580c, #fb923c);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .text-gradient-accent {
+    background-image: linear-gradient(to right, #7c3aed, #ec4899);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .shadow-card {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
+  }
+  .shadow-card-hover {
+    box-shadow: 0 8px 30px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04);
+  }
+  .shadow-elevated {
+    box-shadow: 0 12px 40px rgba(0,0,0,0.1);
+  }
+  .shadow-glow {
+    box-shadow: 0 4px 20px rgba(249,115,22,0.3);
+  }
+  .panel {
+    background-color: #ffffff;
+    border: 1px solid #f1f5f9;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
+  }
 }
 
-/* Focus ring — visible, for keyboard users. */
+/* Floating animation for decorative elements */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+}
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+/* Fade in up animation for fast entrance without heavy JS */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in-up {
+  animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-fade-in {
+  animation: fadeIn 0.25s ease-out forwards;
+}
+
+/* Pulse dot for live indicators */
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.7; }
+}
+.animate-pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* Focus ring for keyboard users */
 :focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid #fb923c;
   outline-offset: 2px;
 }
 
-/* Form fields already have a border, so keep the focus ring hugging the
-   field instead of bleeding up toward the label above it. */
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
   outline-offset: 1px;
 }
 
-/* iOS Safari zooms the whole page in when a focused field's text is under 16px,
-   and never zooms back out. Fields are text-sm (14px) throughout, so raise them
-   to 16px on phones and leave the desktop sizing alone. */
+/* Mobile inputs iOS zoom prevention */
 @media (max-width: 640px) {
   input,
   textarea,
   select {
     font-size: 16px;
   }
-}
-
-/* Panel — flat container. Replaces .glass / .glass-strong. */
-.panel {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-}
-
-/* Kept as no-op aliases so existing markup degrades to plain surfaces
-   instead of breaking. Prefer .panel in new code. */
-.glass,
-.glass-strong {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-}
-
-.gradient-mesh {
-  background: none;
-}
-
-.animate-fade-in,
-.animate-slide-in,
-.animate-pulse-glow,
-.stagger > * {
-  animation: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

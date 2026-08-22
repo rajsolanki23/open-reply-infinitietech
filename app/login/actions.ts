@@ -3,11 +3,14 @@
 import { AuthError } from "next-auth";
 import { signIn, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
-import { hashPassword, normalizeEmail } from "@/lib/auth-passwords";
+import { hashPassword, normalizeEmail, verifyPassword } from "@/lib/auth-passwords";
 import { ensureWorkspaceForUser } from "@/lib/workspace";
+import { checkAuthRateLimit } from "@/lib/utils/rate-limiter";
 
 export type AuthActionResult = {
   error?: string;
+  success?: boolean;
+  message?: string;
   isExistingAccount?: boolean;
 };
 
@@ -29,9 +32,17 @@ export async function loginAction(
     return { error: "Please enter a valid email address." };
   }
 
+  const normalized = normalizeEmail(rawEmail);
+  const rateLimit = await checkAuthRateLimit(`login:${normalized}`, 10, 900);
+  if (!rateLimit.allowed) {
+    return {
+      error: "Too many sign-in attempts. Please wait a few minutes before trying again.",
+    };
+  }
+
   try {
     await signIn("credentials", {
-      email: normalizeEmail(rawEmail),
+      email: normalized,
       password,
       redirectTo: callbackUrl,
     });
@@ -50,85 +61,76 @@ export async function loginAction(
   }
 }
 
-export async function registerAction(
+export async function registerAction(): Promise<AuthActionResult> {
+  return {
+    error:
+      "Public registration is disabled. Please contact your workspace administrator in Settings to provision an account.",
+  };
+}
+
+export async function resetPasswordAction(
   _prevState: AuthActionResult | null,
   formData: FormData
 ): Promise<AuthActionResult> {
   const rawEmail = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
+  const existingPassword = String(formData.get("existingPassword") ?? "");
+  const newPassword = String(formData.get("newPassword") ?? "");
   const confirmPassword = String(formData.get("confirmPassword") ?? "");
-  const name = String(formData.get("name") ?? "").trim();
-  const callbackUrl = String(formData.get("callbackUrl") ?? "/dashboard");
 
-  if (!rawEmail || !password) {
-    return { error: "Please enter both email and password." };
+  if (!rawEmail) {
+    return { error: "Please enter your email address." };
   }
 
   if (!EMAIL_REGEX.test(rawEmail)) {
     return { error: "Please enter a valid email address." };
   }
 
-  if (password.length < 6) {
-    return { error: "Password must be at least 6 characters long." };
+  if (!existingPassword) {
+    return { error: "Please enter your existing password." };
   }
 
-  if (password !== confirmPassword) {
-    return { error: "Passwords do not match. Please verify." };
+  if (!newPassword) {
+    return { error: "Please enter a new password." };
+  }
+
+  if (newPassword.length < 6) {
+    return { error: "New password must be at least 6 characters long." };
+  }
+
+  if (newPassword !== confirmPassword) {
+    return { error: "New passwords do not match. Please verify." };
   }
 
   const normalizedEmail = normalizeEmail(rawEmail);
 
   try {
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
       select: { id: true, passwordHash: true },
     });
 
-    if (existingUser) {
-      if (existingUser.passwordHash) {
-        return {
-          error: "An account with this email already exists. Please sign in instead.",
-          isExistingAccount: true,
-        };
-      }
-
-      // If user existed without a password (legacy account), set password now
-      const passwordHash = await hashPassword(password);
-      await prisma.user.update({
-        where: { id: existingUser.id },
-        data: {
-          passwordHash,
-          name: name || undefined,
-        },
-      });
-      await ensureWorkspaceForUser(existingUser.id, normalizedEmail);
-    } else {
-      // Create fresh user
-      const passwordHash = await hashPassword(password);
-      const newUser = await prisma.user.create({
-        data: {
-          email: normalizedEmail,
-          passwordHash,
-          name: name || normalizedEmail.split("@")[0],
-        },
-      });
-      await ensureWorkspaceForUser(newUser.id, normalizedEmail);
+    if (!user || !user.passwordHash) {
+      return { error: "No account found with this email address." };
     }
 
-    // Immediately sign in the registered user
-    await signIn("credentials", {
-      email: normalizedEmail,
-      password,
-      redirectTo: callbackUrl,
+    const isValid = await verifyPassword(existingPassword, user.passwordHash);
+    if (!isValid) {
+      return { error: "Existing password is wrong. Please check your credentials." };
+    }
+
+    const newPasswordHash = await hashPassword(newPassword);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: newPasswordHash },
     });
-    return {};
+
+    return {
+      success: true,
+      message: "Password reset successfully! Please sign in with your new password.",
+    };
   } catch (error) {
-    if (error instanceof AuthError) {
-      return { error: "Account created, but sign-in failed. Please switch to Sign In." };
-    }
-    // Must re-throw NEXT_REDIRECT to allow Next.js to navigate
-    throw error;
+    console.error("Error resetting password:", error);
+    return { error: "Failed to reset password. Please try again." };
   }
 }
 

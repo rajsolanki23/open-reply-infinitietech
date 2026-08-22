@@ -11,13 +11,26 @@ export default async function DashboardLayout({
 }) {
   const session = await auth();
 
-  if (!session?.user?.id) {
+  let userId = session?.user?.id;
+  const email = session?.user?.email;
+
+  if (!userId && email) {
+    const dbUser = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+    if (dbUser) {
+      userId = dbUser.id;
+    }
+  }
+
+  if (!userId) {
     redirect("/login");
   }
 
   const workspace = await ensureWorkspaceForUser(
-    session.user.id,
-    session.user.email
+    userId,
+    email
   );
   const accounts = await prisma.instagramAccount.findMany({
     where: { workspaceId: workspace.id },

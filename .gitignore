@@ -23,19 +23,33 @@
 # misc
 .DS_Store
 *.pem
+*.key
+*.crt
+*.cert
+*.pfx
+*.p12
 
-# debug
+# database dumps & local sqlite
+*.sql
+*.dump
+*.sqlite
+*.sqlite3
+*.db
+
+# debug & logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
 !.env.example
 
-# vercel
+# vercel & build
 .vercel
+.turbo
 
 # typescript
 *.tsbuildinfo

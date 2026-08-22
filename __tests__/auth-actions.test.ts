@@ -34,7 +34,12 @@ vi.mock("@/lib/workspace", () => ({
   ensureWorkspaceForUser: vi.fn().mockResolvedValue({ id: "ws-123", name: "Default" }),
 }));
 
-import { loginAction, registerAction, signOutAction } from "../app/login/actions";
+vi.mock("@/lib/utils/rate-limiter", () => ({
+  checkAuthRateLimit: vi.fn().mockResolvedValue({ allowed: true, remaining: 5, retryAfterSeconds: 0 }),
+}));
+
+import { loginAction, registerAction, resetPasswordAction, signOutAction } from "../app/login/actions";
+import { hashPassword } from "@/lib/auth-passwords";
 
 describe("Auth Server Actions", () => {
   beforeEach(() => {
@@ -78,92 +83,88 @@ describe("Auth Server Actions", () => {
   });
 
   describe("registerAction", () => {
-    it("returns error when required fields are missing", async () => {
+    it("informs caller that public registration is disabled", async () => {
+      const result = await registerAction();
+      expect(result.error).toContain("Public registration is disabled");
+    });
+  });
+
+  describe("resetPasswordAction", () => {
+    it("returns error when email or passwords are missing", async () => {
       const formData = new FormData();
       formData.set("email", "");
-      formData.set("password", "");
+      formData.set("existingPassword", "");
 
-      const result = await registerAction(null, formData);
-      expect(result.error).toBe("Please enter both email and password.");
+      const result = await resetPasswordAction(null, formData);
+      expect(result.error).toBe("Please enter your email address.");
     });
 
-    it("returns error when email format is invalid", async () => {
-      const formData = new FormData();
-      formData.set("email", "invalid-email");
-      formData.set("password", "pass123");
-      formData.set("confirmPassword", "pass123");
-
-      const result = await registerAction(null, formData);
-      expect(result.error).toBe("Please enter a valid email address.");
-    });
-
-    it("returns error when password is under 6 characters", async () => {
+    it("returns error when new passwords do not match", async () => {
       const formData = new FormData();
       formData.set("email", "user@example.com");
-      formData.set("password", "12345");
-      formData.set("confirmPassword", "12345");
+      formData.set("existingPassword", "oldpass123");
+      formData.set("newPassword", "newpass123");
+      formData.set("confirmPassword", "mismatched123");
 
-      const result = await registerAction(null, formData);
-      expect(result.error).toBe("Password must be at least 6 characters long.");
+      const result = await resetPasswordAction(null, formData);
+      expect(result.error).toBe("New passwords do not match. Please verify.");
     });
 
-    it("returns error when passwords do not match", async () => {
-      const formData = new FormData();
-      formData.set("email", "user@example.com");
-      formData.set("password", "secret123");
-      formData.set("confirmPassword", "different123");
-
-      const result = await registerAction(null, formData);
-      expect(result.error).toBe("Passwords do not match. Please verify.");
-    });
-
-    it("creates user, provisions workspace, and signs in on successful registration", async () => {
+    it("returns error when account does not exist", async () => {
       const { prisma } = await import("@/lib/db/client");
-      const { signIn } = await import("@/lib/auth");
-      const { ensureWorkspaceForUser } = await import("@/lib/workspace");
-
       (prisma.user.findUnique as any).mockResolvedValue(null);
-      (prisma.user.create as any).mockResolvedValue({
-        id: "user-123",
-        email: "newuser@example.com",
-        name: "New User",
-      });
 
       const formData = new FormData();
-      formData.set("email", "newuser@example.com");
-      formData.set("password", "securepassword123");
-      formData.set("confirmPassword", "securepassword123");
-      formData.set("name", "New User");
-      formData.set("callbackUrl", "/campaigns");
+      formData.set("email", "nonexistent@example.com");
+      formData.set("existingPassword", "oldpass123");
+      formData.set("newPassword", "newpass123");
+      formData.set("confirmPassword", "newpass123");
 
-      const result = await registerAction(null, formData);
-      expect(result.error).toBeUndefined();
-      expect(prisma.user.create).toHaveBeenCalled();
-      expect(ensureWorkspaceForUser).toHaveBeenCalledWith("user-123", "newuser@example.com");
-      expect(signIn).toHaveBeenCalledWith("credentials", {
-        email: "newuser@example.com",
-        password: "securepassword123",
-        redirectTo: "/campaigns",
-      });
+      const result = await resetPasswordAction(null, formData);
+      expect(result.error).toBe("No account found with this email address.");
     });
 
-    it("informs user when account with email already exists", async () => {
+    it("returns warning when existing password is wrong", async () => {
       const { prisma } = await import("@/lib/db/client");
+      const realHash = await hashPassword("actualpassword123");
       (prisma.user.findUnique as any).mockResolvedValue({
-        id: "user-existing",
-        passwordHash: "$2a$10$hashedpassword...",
+        id: "user-1",
+        email: "user@example.com",
+        passwordHash: realHash,
       });
 
       const formData = new FormData();
-      formData.set("email", "existing@example.com");
-      formData.set("password", "secret123");
-      formData.set("confirmPassword", "secret123");
+      formData.set("email", "user@example.com");
+      formData.set("existingPassword", "WRONGpassword");
+      formData.set("newPassword", "newpassword456");
+      formData.set("confirmPassword", "newpassword456");
 
-      const result = await registerAction(null, formData);
-      expect(result.error).toBe(
-        "An account with this email already exists. Please sign in instead."
-      );
-      expect(result.isExistingAccount).toBe(true);
+      const result = await resetPasswordAction(null, formData);
+      expect(result.error).toBe("Existing password is wrong. Please check your credentials.");
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it("successfully resets password when email and existing password match", async () => {
+      const { prisma } = await import("@/lib/db/client");
+      const realHash = await hashPassword("correctoldpassword123");
+      (prisma.user.findUnique as any).mockResolvedValue({
+        id: "user-1",
+        email: "user@example.com",
+        passwordHash: realHash,
+      });
+      (prisma.user.update as any).mockResolvedValue({ id: "user-1" });
+
+      const formData = new FormData();
+      formData.set("email", "user@example.com");
+      formData.set("existingPassword", "correctoldpassword123");
+      formData.set("newPassword", "brandnewpassword456");
+      formData.set("confirmPassword", "brandnewpassword456");
+
+      const result = await resetPasswordAction(null, formData);
+      expect(result.error).toBeUndefined();
+      expect(result.success).toBe(true);
+      expect(result.message).toBe("Password reset successfully! Please sign in with your new password.");
+      expect(prisma.user.update).toHaveBeenCalled();
     });
   });
 
